@@ -13,8 +13,8 @@
 ## Authors
 - 
 - 
-- 
-- 
+- Luke Newton (100999309)
+- Ryan Ribeiro (100997936)
 - Joe Frederick Samuel (100998314)
 
 ## Changes that were made since the previous deliverable
