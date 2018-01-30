@@ -11,7 +11,7 @@
 
 
 ## Authors
-- 
+- Kevin Sun (101000157)
 - Cameron Rushton (101002958)
 - Luke Newton (100999309)
 - Ryan Ribeiro (100997936)
