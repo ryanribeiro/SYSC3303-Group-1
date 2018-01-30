@@ -3,7 +3,7 @@ package server;
 /**
  * A subclass of exception to be thrown when the server reads a message of invalid format
  * 
- * @author luken
+ * @author Luke Newton
  *
  */
 public class InvalidMessageFormatException extends Exception{
