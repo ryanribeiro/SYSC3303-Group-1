@@ -11,10 +11,10 @@ import java.util.Arrays;
 
 /**
  * a class representing the client for the server-client-intermediate host system. has
- * capabliitty to send and receive messages to and from the intermediate host, 
+ * Capability to send and receive messages to and from the intermediate host, 
  * and format read/write requests
  * 
- * @author lukeN
+ * @author Luke Newton
  */
 public class Client {
 	//number of times client algorithm repeats in main
@@ -29,12 +29,12 @@ public class Client {
 	private static final String MODE = "octet";
 	//change this to turn on/off timeouts for the client
 	private static final boolean TIMEOUTS_ON = true;
-	//miliseconds until client times out while waiting for response
+	//Milliseconds until client times out while waiting for response
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 
 	//socket used by client to send and receive datagrams
 	private DatagramSocket sendRecieveSocket;
-	//place to sotre repsonse from intermediate host
+	//place to store response from intermediate host
 	private DatagramPacket recievePacket;
 
 	/**Constructor
@@ -47,7 +47,7 @@ public class Client {
 		if(TIMEOUTS_ON)
 			sendRecieveSocket.setSoTimeout(TIMEOUT_MILLISECONDS);
 
-		//create packet of max size to garunettee it fits a received message
+		//create packet of max size to guarantee it fits a received message
 		recievePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
 	}
 
@@ -59,7 +59,7 @@ public class Client {
 	}
 
 	/**
-	 *reutrn the data in the datadram packet received
+	 *return the data in the datagram packet received
 	 *
 	 * @return  the data in the datagram packet received
 	 */
@@ -95,21 +95,37 @@ public class Client {
 	 * sends a datagram through the intermediate host's sendRecieveSocket
 	 * 
 	 * @param message	the datagram packet to send
-	 * @throws IOException indicates and I/O error occured while sending a message
+	 * @throws IOException indicates and I/O error occurred while sending a message
 	 */
 	public void sendMessage(DatagramPacket message) throws IOException{
 		sendRecieveSocket.send(message);
 	}
 
 	/**
-	 * client waits until it recieves a message, which is stored in receivePacket and returned
+	 * client waits until it receives a message, which is stored in receivePacket and returned
 	 * 
-	 * @throws IOException indicated an I/O error has occured
-	 * @return returns the recieve datagram packet
+	 * @throws IOException indicated an I/O error has occurred
+	 * @return returns the receive datagram packet
 	 */
 	public DatagramPacket waitRecieveMessage() throws IOException{
 		sendRecieveSocket.receive(recievePacket);	
 		return recievePacket;
+	}
+	
+	/**
+	 * prints packet information
+	 * 
+	 * @author Luke Newton, Cameron Rushton
+	 * @param packet : DatagramPacket
+	 */
+	public void printPacketInfo(DatagramPacket packet) {
+		//get meaningful portion of message
+		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());		
+
+		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
+		System.out.println("Message length: " + packet.getLength());
+		System.out.println("Containing: " + new String(dataAsByteArray));
+		System.out.println("Conents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
 	}
 
 	/**
@@ -124,7 +140,7 @@ public class Client {
 			client = new Client();
 		} catch (SocketException e) {
 			//failed to create client due to failure to create DatagramSocket
-			System.out.println("SocketException: failed to create socket for client program.");
+			System.err.println("SocketException: failed to create socket for client program.");
 			e.printStackTrace();
 			System.exit(1);
 		}
@@ -133,14 +149,17 @@ public class Client {
 		for(int i = 0; i < NUMBER_OF_CLIENT_MAIN_ITERATIONS; i++){
 			/*create content for DatagramPacket to send to intermediate host*/
 			byte[] requestData;
+			
 			/*alternate between read and write requests, with final being invalid format*/
 			if(i == NUMBER_OF_CLIENT_MAIN_ITERATIONS - 1) {
 				//final invalid format message
 				String message = "this message is invalid format";
 				requestData = message.getBytes();
+				
 			} else if(i % 2 == 0) {
 				//read request
 				requestData = createPacketData(FILENAME, MODE, RequestType.read);
+				
 			} else {
 				//write request
 				requestData = createPacketData(FILENAME, MODE, RequestType.write);
@@ -153,24 +172,20 @@ public class Client {
 						InetAddress.getLocalHost(), INTERMEDIATE_HOST_PORT_NUMBER);
 			} catch (UnknownHostException e) {
 				//failed to determine the host IP address
-				System.out.println("UnknownHostException: could not determine IP address of host while creating packet to send to intermediate host.");
+				System.err.println("UnknownHostException: could not determine IP address of host while creating packet to send to intermediate host.");
 				e.printStackTrace();
 				System.exit(1);
 			}
 
 			//print information to send in packet to intermediate host
-			System.out.println("Client sending message: ");
-			System.out.println("To host: " + sendPacket.getAddress());
-			System.out.println("	on port: " + sendPacket.getPort());
-			System.out.println("Message length: " + sendPacket.getLength());
-			System.out.println("Containing: " + new String(sendPacket.getData()));
-			System.out.println("Conents as raw data: " + Arrays.toString(sendPacket.getData()));
+			System.out.print("Client sending message: \nTo ");
+			client.printPacketInfo(sendPacket);
 
-			//send datagram to intermedaite host
+			//send datagram to intermediate host
 			try {
 				client.sendMessage(sendPacket);
 			} catch (IOException e) {
-				System.out.println("IOException: I/O error occured while sending message to intermediate host");
+				System.err.println("IOException: I/O error occured while sending message to intermediate host");
 				e.printStackTrace();
 				System.exit(1);
 			}
@@ -183,18 +198,15 @@ public class Client {
 				System.out.println("Client waiting for response...");
 				response = client.waitRecieveMessage();
 			} catch (IOException e) {
-				System.out.println("IOException: I/O error occured while client waiting for response");
+				System.err.println("IOException: I/O error occured while client waiting for response");
 				e.printStackTrace();
 				System.exit(1);
 			}
 
-			//print information recieved from intermediate host
-			System.out.println("Client received message: ");
-			System.out.println("From host: " + response.getAddress());
-			System.out.println("	on port: " + response.getPort());
-			System.out.println("Message length: " + response.getLength());
-			byte[] responseData = Arrays.copyOf(response.getData(), response.getLength());
-			System.out.println("Containing: " + Arrays.toString(responseData));
+			//print information received from intermediate host
+			System.out.print("Client received message: \nFrom ");
+			client.printPacketInfo(response);
+			
 		}
 		client.closeClientSocket();
 	}
