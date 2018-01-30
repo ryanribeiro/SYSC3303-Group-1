@@ -14,7 +14,7 @@ import java.util.Arrays;
  * Capability to send and receive messages to and from the intermediate host, 
  * and format read/write requests
  * 
- * @author lukeN
+ * @author Luke Newton
  */
 public class Client {
 	//number of times client algorithm repeats in main
