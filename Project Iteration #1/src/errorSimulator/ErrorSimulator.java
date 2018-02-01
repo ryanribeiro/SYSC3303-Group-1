@@ -81,6 +81,22 @@ public class ErrorSimulator {
 	}
 
 	/**
+	 * returns the port number of the server's recieve socket
+	 * 
+	 * @return the port number of the server's recieve socket
+	 */
+	public int getPort(){
+		return recieveSocket.getLocalPort();
+	}
+	
+	/**
+	 * closes the servers receive socket
+	 */
+	public void closeRecieveSocket(){
+		recieveSocket.close();
+	}
+	
+	/**
 	 * error simulator waits until it receives a message, which is stored in receivePacket and returned
 	 * 
 	 * @throws IOException indicated an I/O error has occurred
