@@ -7,7 +7,6 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
 import java.util.Arrays;
 
 /**
@@ -87,6 +86,22 @@ public class Server {
 		return clientPort;
 	}
 
+	/**
+	 * returns the port number of the server's recieve socket
+	 * 
+	 * @return the port number of the server's recieve socket
+	 */
+	public int getPort(){
+		return recieveSocket.getLocalPort();
+	}
+	
+	/**
+	 * closes the servers receive socket
+	 */
+	public void closeRecieveSocket(){
+		recieveSocket.close();
+	}
+	
 	/**
 	 * client waits until it receives a message, which is parsed, stored in receivePacket and returned
 	 * 
