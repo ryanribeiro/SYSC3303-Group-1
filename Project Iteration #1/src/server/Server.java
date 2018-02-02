@@ -21,25 +21,21 @@ public class Server {
 	//the port the server is located on
 	private static final int SERVER_PORT_NUMBER = 69;
 	//change this to turn on/off timeouts for the server
-	private static final boolean TIMEOUTS_ON = true;
+	private static final boolean TIMEOUTS_ON = false;
 	//Milliseconds until server times out while waiting for response
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//max size for data in a DatagramPacket
 	private static final int MAX_PACKET_SIZE = 100;
 
 	//socket to receive messages
-	private DatagramSocket recieveSocket, sendSocket;
+	private DatagramSocket receiveSocket;
 	//port number of client to send response to
 	private int clientPort;
 	//buffer to contain data to send to client
-	private DatagramPacket recievePacket;
-	//flags to indicate if received message is a read/write request
-	private boolean readRequest, writeRequest;
-	
-	//file name acquired from packet
-	private String fileName;
-	//mode acquired from packet
-	private String mode;
+	private DatagramPacket receivePacket;
+
+
+	private static Thread serverLogicThread;
 
 	/**
 	 * Constructor
@@ -47,15 +43,14 @@ public class Server {
 	 * @throws SocketException indicate failed to create socket for the intermediate host
 	 */
 	public Server() throws SocketException{
-		recieveSocket = new DatagramSocket();
+		receiveSocket = new DatagramSocket();
 		//turn on timeout if required
 		if(TIMEOUTS_ON)
-			recieveSocket.setSoTimeout(TIMEOUT_MILLISECONDS);
-		sendSocket = null;
+			receiveSocket.setSoTimeout(TIMEOUT_MILLISECONDS);
+
 		//create packet of max size to guarantee it fits a received message
-		recievePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
-		readRequest = false;
-		writeRequest = false;
+		receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
+
 	}
 
 	/**
@@ -66,16 +61,17 @@ public class Server {
 	 */
 	public Server(int port) throws SocketException{
 		this();
-		recieveSocket = new DatagramSocket(port);
+		receiveSocket = new DatagramSocket(port);
 	}
+
 
 	/**
 	 *Return the data in the datagram packet received
 	 *
 	 * @return  the data in the datagram packet received
 	 */
-	public byte[] getRecievePacketData(){
-		return recievePacket.getData();
+	public byte[] getreceivePacketData(){
+		return receivePacket.getData();
 	}
 
 	/**
@@ -94,134 +90,24 @@ public class Server {
 	 * @throws IOException indicated an I/O error has occurred
 	 * @throws InvalidMessageFormatException indicates that the message received was not a valid format
 	 */
-	public DatagramPacket waitRecieveMessage() throws IOException, InvalidMessageFormatException{
-		recieveSocket.receive(recievePacket);
-		//get the port number from the sender (client) to send response
-		clientPort = recievePacket.getPort();
-		//check message for proper format
-		parseMessage();
-		return recievePacket;
-	}
+	public DatagramPacket waitReceiveMessage() throws IOException, InvalidMessageFormatException{
 
-	/**
-	 * ensures the received message is of proper format. format follows:
-	 * 
-	 * byte 0: 0 byte
-	 * byte 1: 1 byte for read request, 2 byte for write request
-	 * byte 2 to n: some text
-	 * byte n+1: 0 byte
-	 * byte n+2 to m: some text
-	 * byte m+1: 0 byte
-	 * nothing follows (ie. byte array has m+2 elements)
-	 * 
-	 * @throws InvalidMessageFormatException indicates that the received message is not a valid read/write command
-	 */
-	private void parseMessage() throws InvalidMessageFormatException{
-		byte[] messageData = Arrays.copyOf(recievePacket.getData(), recievePacket.getLength());
-
-		//check first byte
-		if(messageData[0] != 0)
-			throw new InvalidMessageFormatException();
-
-		//check read/write byte
-		if(messageData[1] == 1) {
-			readRequest = true;
-			writeRequest = false;
-		} else if(messageData[1] == 2) {
-			readRequest = false;
-			writeRequest = true;
-		} else {
-			throw new InvalidMessageFormatException();
-		}
-
-		int currentIndex = 2; //start at 2 to account for the first two bytes
-		//store names of file and mode in a stream
-		ByteArrayOutputStream textStream = new ByteArrayOutputStream();
+		receiveSocket.receive(receivePacket);
 		try {
-			/******************************************
-			 * Check for some text followed by a zero *
-			 * & add text to byte array               *
-			 *****************************************/
-			//NOTE: this does not allow for spaces (space represented by a zero byte)
-			for(;messageData[currentIndex] != 0; currentIndex++){
-				textStream.write(messageData[currentIndex]);
-			}
-			if (textStream.size() <= 0)
-				throw new InvalidMessageFormatException("File Name Empty");
-			
-			//Convert file name to byte array
-			fileName = textStream.toString();
-		    
-			/***********************************************
-			 * Check for some more text followed by a zero *
-			 ***********************************************/
-			//NOTE: this does not allow for spaces (space represented by a zero byte)
-			textStream.reset();
-			
-			for(currentIndex++; messageData[currentIndex] != 0; currentIndex++){
-				textStream.write(messageData[currentIndex]);
-			}
-			
-			if (textStream.size() <= 0)
-				throw new InvalidMessageFormatException("Mode Empty");
-			
-			mode = textStream.toString();
-			mode = mode.toLowerCase();
-			
-			//if the mode text is not netascii or octet, packet is invalid
-			if (!mode.equals("netascii") && !mode.equals("octet"))
-				throw new InvalidMessageFormatException("Invalid Mode");
-			
-			
-		} catch (IndexOutOfBoundsException e){
-			/*if we go out of bounds while iterating through the message data,
-			 * then it does not end in a 0 and thus is incorrect format
-			 */
-			throw new InvalidMessageFormatException("Reached End Of Packet");
+
+			serverLogicThread = new ServerSpawnThread(receivePacket);       
+			serverLogicThread.start();
+
+
+		} catch (Exception se) {
+			se.printStackTrace();
+			System.exit(1);
 		}
-		//check that this is the end of the message
-		if(currentIndex + 1 != messageData.length){
-			throw new InvalidMessageFormatException("Reached \"End\" Of Packet But There Is More");
-		}
+
+		return receivePacket;
+
 	}
 
-	/**
-	 * sends a datagram through the servers's sendSocket
-	 * 
-	 * @param message	the datagram packet to send
-	 * @throws IOException indicates and I/O error occurred while sending a message
-	 */
-	public void sendMessage(DatagramPacket message) throws IOException{
-		sendSocket = new DatagramSocket();
-		sendSocket.send(message);
-		sendSocket.close();
-	}
-
-	/**
-	 * creates the data to be placed into a  DatagramPacket based on the type of request last received
-	 * 
-	 * @return a byte array containing the response to the last request sent
-	 */
-	public byte[] createPacketData(){
-		ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-
-		byteStream.write(0);
-
-		if(readRequest)
-			byteStream.write(3);
-		else if (writeRequest)
-			byteStream.write(4);
-
-		byteStream.write(0);
-
-		if(readRequest)
-			byteStream.write(1);
-		else if (writeRequest)
-			byteStream.write(0);
-
-		return byteStream.toByteArray();
-	}
-	
 	/**
 	 * prints packet information
 	 * 
@@ -235,7 +121,7 @@ public class Server {
 		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
 		System.out.println("Message length: " + packet.getLength());
 		System.out.println("Containing: " + new String(dataAsByteArray));
-		System.out.println("Conents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
+		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
 	}
 
 	/**
@@ -249,7 +135,7 @@ public class Server {
 		Server server = null;
 		try {
 			server = new Server(SERVER_PORT_NUMBER);
-			
+
 		} catch (SocketException e) {
 			System.err.println("SocketException: failed to create socket for server");
 			e.printStackTrace();
@@ -257,17 +143,17 @@ public class Server {
 		}
 
 		while(true) {
-			
-			 /*****************
+
+			/*****************
 			 * Receive Packet *
 			 *****************/
 			DatagramPacket request = null;
 			try {
 				System.out.println("Server waiting for request...");
-				request = server.waitRecieveMessage();
-				
+				request = server.waitReceiveMessage();
+
 			} catch (IOException e) {
-				System.err.println("IOException: I/O error occured while server waiting to recieve message");
+				System.err.println("IOException: I/O error occured while server waiting to receive message");
 				e.printStackTrace();
 				System.exit(1);
 			} catch (InvalidMessageFormatException e) {
@@ -277,39 +163,10 @@ public class Server {
 			}	
 
 			//print data received from intermediate host
-			System.out.print("Server recieved message: \nFrom ");
+			System.out.print("Server received message: \nFrom ");
 			server.printPacketInfo(request);
-			
-			/***********************
-			* Create & Send Packet *
-			***********************/
-			DatagramPacket sendPacket = null;
-			byte[] responseData = server.createPacketData();
-			try {
-				sendPacket = new DatagramPacket(responseData, responseData.length,
-						InetAddress.getLocalHost(), server.getClientPort());
-				
-			} catch (UnknownHostException e) {
-				//failed to determine the host IP address
-				System.err.println("UnknownHostException: could not determine IP address of host while creating server response.");
-				e.printStackTrace();
-				System.exit(1);
-			}
 
-			//print data to send to intermediate host
-			System.out.print("Server Response: \nTo ");
-			server.printPacketInfo(sendPacket);
 
-			//send datagram to intermediate host
-			try {
-				server.sendMessage(sendPacket);
-				
-			} catch (IOException e) {
-				System.err.println("IOException: I/O error occured while server sending message");
-				e.printStackTrace();
-				System.exit(1);
-			}
-			System.out.println("Server response sent");
 		}
 	}
 }
