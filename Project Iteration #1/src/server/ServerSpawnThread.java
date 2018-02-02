@@ -2,60 +2,77 @@ package server;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.*;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Arrays;
 
-
-public class ServerSpawnThread extends Thread{
-
+public class ServerSpawnThread implements Runnable{	
+	//the message to process and respond to
 	private DatagramPacket receivePacket;
-	private DatagramSocket receiveSocket;
+	//socket to send a response to message
 	private DatagramSocket sendSocket;
-	private int writeRead;
-	private Thread response;
-
 	//flags to indicate if received message is a read/write request
 	private boolean readRequest, writeRequest;
-
 	//file name acquired from packet
 	private String fileName;
 	//mode acquired from packet
 	private String mode;
-	
+	//reference to the server object to use as a lock
+	private Server serverLock;
+
 	//port number of client to send response to
 	private int clientPort;
-	
-	public ServerSpawnThread(DatagramPacket packet){
-		// Assign a datagram socket and bind it to port 69 
-		// on the local host machine. This socket will be used to
-		// receive UDP Datagram packets.
-		receivePacket = packet;
+
+	/**
+	 * Constructor
+	 * 
+	 * @param server reference to the Server that created this to use as lock
+	 * @param packet the message to process and respond to
+	 */
+	public ServerSpawnThread(Server server, DatagramPacket packet){
+		receivePacket = new DatagramPacket(packet.getData(), packet.getLength(),
+				packet.getAddress(), packet.getPort());
 		clientPort = receivePacket.getPort();
 		readRequest = false;
 		writeRequest = false;
+		serverLock = server;
 	}
 
-	public void close(){
-		receiveSocket.close();
-	}
-
+	/**
+	 * function to execute when thread created.
+	 * handles parsing and responding to message.
+	 */
 	public void run(){
-		while(!Thread.interrupted()){
-
-       
-				try {
-					parseMessage();
-				} catch (InvalidMessageFormatException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}           
-
-				//build response message 
-
-				sendPacket(receivePacket); 
-
+		/*synchronize on a common object so we only process one message at a time.
+		 * primarily so the console prints ll info for a single message at once*/
+		synchronized(serverLock){
+			//print data received from client
+			System.out.print("Server received message: \nFrom ");
+			printPacketInfo(receivePacket);
 			
-		}	       
+			/*check if message is proper format*/
+			try {
+				parseMessage();
+			} catch (InvalidMessageFormatException e) {
+				System.out.println("InvalidMessageFormatException: a message received was of an invalid format");
+				e.printStackTrace();
+				System.out.println("Invalid message Contents:");
+				printPacketInfo(receivePacket);
+				System.exit(1);
+			}           
+
+			/*send response*/
+			try {
+				sendPacket(receivePacket); 
+			} catch (IOException e) {
+				//failed to determine the host IP address
+				System.err.println("IOException: I/O exception occured while sending message");
+				e.printStackTrace();
+				System.exit(1);
+			}   
+		}
 	}
 
 	/**
@@ -127,7 +144,6 @@ public class ServerSpawnThread extends Thread{
 			if (!mode.equals("netascii") && !mode.equals("octet"))
 				throw new InvalidMessageFormatException("Invalid Mode");
 
-
 		} catch (IndexOutOfBoundsException e){
 			/*if we go out of bounds while iterating through the message data,
 			 * then it does not end in a 0 and thus is incorrect format
@@ -146,44 +162,29 @@ public class ServerSpawnThread extends Thread{
 	 * @param message	the datagram packet to send
 	 * @throws IOException indicates and I/O error occurred while sending a message
 	 */
-	/**
-	 * creates the data to be placed into a  DatagramPacket based on the type of request last received
-	 * 
-	 * @return a byte array containing the response to the last request sent
-	 */
-	
-public void sendPacket(DatagramPacket packet){
-	/***********************
-	 * Create & Send Packet *
-	 ***********************/
-	DatagramPacket sendPacket = null;
-	byte[] responseData = this.createPacketData();
-	try {
-		sendPacket = new DatagramPacket(responseData, responseData.length,
+	public void sendPacket(DatagramPacket packet) throws UnknownHostException, IOException{
+		/***********************
+		 * Create & Send Packet *
+		 ***********************/
+		byte[] responseData = this.createPacketData();
+
+		DatagramPacket sendPacket = new DatagramPacket(responseData, responseData.length,
 				InetAddress.getLocalHost(), clientPort);
 
-	} catch (UnknownHostException e) {
-		//failed to determine the host IP address
-		System.err.println("UnknownHostException: could not determine IP address of host while creating server response.");
-		e.printStackTrace();
-		System.exit(1);
-	}
-	
-	//print data to send to intermediate host
-	System.out.print("Server Response: \nTo ");
-	this.printPacketInfo(sendPacket);
-	
-	try {
-		this.sendMessage(sendPacket);
-	} catch (IOException e) {
-		System.err.println("IOException: I/O error occured while server sending message");
-		e.printStackTrace();
-		System.exit(1);
-	}
-	
-	System.out.println("Server response sent");
-}
+		//print data to send to intermediate host
+		System.out.print("Server Response: \nTo ");
+		printPacketInfo(sendPacket);
 
+		sendMessage(sendPacket);
+
+		System.out.println("Server response sent");
+	}
+
+	/**
+	 * formats a message as a response to the appropriate request
+	 * 
+	 * @return the message converted into a byte array with proper format
+	 */
 	public byte[] createPacketData(){
 		ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
 
@@ -203,13 +204,19 @@ public void sendPacket(DatagramPacket packet){
 
 		return byteStream.toByteArray();
 	}
-	
+
+	/**
+	 * sends a datagram from the server
+	 * 
+	 * @param message	the datagram packet to send
+	 * @throws IOException indicates and I/O error occurred while sending a message
+	 */
 	public void sendMessage(DatagramPacket message) throws IOException{
 		sendSocket = new DatagramSocket();
 		sendSocket.send(message);
 		sendSocket.close();
 	}
-	
+
 	/**
 	 * prints packet information
 	 * 
@@ -225,9 +232,4 @@ public void sendPacket(DatagramPacket packet){
 		System.out.println("Containing: " + new String(dataAsByteArray));
 		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
 	}
-	
-	public static void main( String args[] ){
-		
-	}   
-
 }

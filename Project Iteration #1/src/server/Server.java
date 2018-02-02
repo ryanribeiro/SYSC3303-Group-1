@@ -1,27 +1,23 @@
 package server;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.net.SocketException;
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Arrays;
 
 /**
  * a class representing the server for the server-client-intermediate host system. has
- * Capability to receive requests, process them, and send appropriate responses
+ * Capability to receive requests, and create threads to process and send appropriate 
+ * responses
  * 
- * @author Luke Newton
+ * @author Luke Newton Kevin Sun
  *
  */
 public class Server {
 	//the port the server is located on
 	private static final int SERVER_PORT_NUMBER = 69;
 	//change this to turn on/off timeouts for the server
-	private static final boolean TIMEOUTS_ON = false;
+	private static final boolean TIMEOUTS_ON = true;
 	//Milliseconds until server times out while waiting for response
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//max size for data in a DatagramPacket
@@ -33,8 +29,7 @@ public class Server {
 	private int clientPort;
 	//buffer to contain data to send to client
 	private DatagramPacket receivePacket;
-
-
+	//thread created to handle a client request
 	private static Thread serverLogicThread;
 
 	/**
@@ -50,7 +45,6 @@ public class Server {
 
 		//create packet of max size to guarantee it fits a received message
 		receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
-
 	}
 
 	/**
@@ -88,40 +82,10 @@ public class Server {
 	 * 
 	 * @return the message received as a  DatagramPacket
 	 * @throws IOException indicated an I/O error has occurred
-	 * @throws InvalidMessageFormatException indicates that the message received was not a valid format
 	 */
-	public DatagramPacket waitReceiveMessage() throws IOException, InvalidMessageFormatException{
-
+	public DatagramPacket waitReceiveMessage() throws IOException{
 		receiveSocket.receive(receivePacket);
-		try {
-
-			serverLogicThread = new ServerSpawnThread(receivePacket);       
-			serverLogicThread.start();
-
-
-		} catch (Exception se) {
-			se.printStackTrace();
-			System.exit(1);
-		}
-
 		return receivePacket;
-
-	}
-
-	/**
-	 * prints packet information
-	 * 
-	 * @author Luke Newton, Cameron Rushton
-	 * @param packet : DatagramPacket
-	 */
-	public void printPacketInfo(DatagramPacket packet) {
-		//get meaningful portion of message
-		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());		
-
-		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
-		System.out.println("Message length: " + packet.getLength());
-		System.out.println("Containing: " + new String(dataAsByteArray));
-		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
 	}
 
 	/**
@@ -130,8 +94,7 @@ public class Server {
 	 * @param args
 	 */
 	public static void main(String[] args) {
-
-		//attempt to create server
+		/*attempt to create server*/
 		Server server = null;
 		try {
 			server = new Server(SERVER_PORT_NUMBER);
@@ -142,31 +105,19 @@ public class Server {
 			System.exit(1);
 		}
 
+		/*Recieve packet and create a thread to handle the request*/
 		while(true) {
-
-			/*****************
-			 * Receive Packet *
-			 *****************/
 			DatagramPacket request = null;
 			try {
-				System.out.println("Server waiting for request...");
 				request = server.waitReceiveMessage();
-
 			} catch (IOException e) {
 				System.err.println("IOException: I/O error occured while server waiting to receive message");
 				e.printStackTrace();
 				System.exit(1);
-			} catch (InvalidMessageFormatException e) {
-				System.err.println("InvalidMessageFormatException: received message is of invalid format");
-				e.printStackTrace();
-				System.exit(1);
-			}	
-
-			//print data received from intermediate host
-			System.out.print("Server received message: \nFrom ");
-			server.printPacketInfo(request);
-
-
+			}
+			
+			serverLogicThread = new Thread(new ServerSpawnThread(server, request));       
+			serverLogicThread.start();
 		}
 	}
 }
