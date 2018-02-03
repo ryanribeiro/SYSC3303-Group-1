@@ -1,7 +1,12 @@
 package server;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -26,6 +31,8 @@ public class Server {
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//max size for data in a DatagramPacket
 	private static final int MAX_PACKET_SIZE = 100;
+	//max number of bytes in a file being sent
+	private static final int MAX_BYTES_IN_FILE = 65536;
 
 	//socket to receive messages
 	private DatagramSocket recieveSocket, sendSocket;
@@ -67,6 +74,42 @@ public class Server {
 	public Server(int port) throws SocketException{
 		this();
 		recieveSocket = new DatagramSocket(port);
+	}
+	
+	//TFTP methods
+	public void sendData(String filename) {
+		
+		byte[] bytesReadIn = readFile(filename);
+		
+		sendFile(bytesReadIn);
+	}
+	
+	public byte[] readFile(String filename) { 
+		File file = new File(filename);
+		byte[] buffer = new byte[(int) file.length()];		
+		try {
+			InputStream input = new FileInputStream(file);
+			try {
+				input.read(buffer);
+			} catch (IOException e) {
+				System.out.println("Failed to read the file.");
+				e.printStackTrace();
+			}
+			try {
+				input.close();
+			} catch (IOException e) {
+				System.out.println("Failed to close file InputStream.");
+				e.printStackTrace();
+			}
+		} catch (FileNotFoundException e) {
+			System.out.println("Failed to find the file.");
+			e.printStackTrace();
+		}		
+		return buffer; 
+	}
+	public void sendFile(byte[] bytesReadIn) {
+		
+		
 	}
 
 	/**
