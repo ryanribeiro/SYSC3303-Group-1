@@ -22,7 +22,13 @@ public class Server {
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//max size for data in a DatagramPacket
 	private static final int MAX_PACKET_SIZE = 100;
-
+	//change this to turn on/off pauses for the server request processing
+	private static final boolean PAUSES_ON = true;
+	/*number of milliseconds server pauses for each time
+	*(note that setting this too high with timeouts on may
+	*timeout client before message is processed)*/
+	private static final int PAUSE_MILLISECONDS = 1000;
+	
 	//socket to receive messages
 	private DatagramSocket receiveSocket;
 	//port number of client to send response to
@@ -31,6 +37,10 @@ public class Server {
 	private DatagramPacket receivePacket;
 	//thread created to handle a client request
 	private static Thread serverLogicThread;
+	//boolean indicating whther server should be shutting down
+	private volatile boolean quitPreperation;
+	//integer representing the number of messages currently being processed
+	private volatile int numberOfMessagesBeingProcessed;
 
 	/**
 	 * Constructor
@@ -45,6 +55,8 @@ public class Server {
 
 		//create packet of max size to guarantee it fits a received message
 		receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
+		quitPreperation = false;
+		numberOfMessagesBeingProcessed = 0;
 	}
 
 	/**
@@ -58,6 +70,54 @@ public class Server {
 		receiveSocket = new DatagramSocket(port);
 	}
 
+	/**
+	 * informs the caller of whether or not the server is shutting down
+	 * 
+	 * @return true if server is shutting down, otherwise false
+	 */
+	public boolean isQuitTime() {
+		return quitPreperation;
+	}
+
+	/**
+	 * inform the server to begin shutting down
+	 */
+	public void setQuitTime() {
+		synchronized(this){
+			this.quitPreperation = true;
+			receiveSocket.close();
+		}
+	}
+
+	/**
+	 * create a new thread to deal with a specified message
+	 * 
+	 * @param request the message received to process
+	 */
+	public void newMessageToProcess(DatagramPacket request){
+		System.out.println("Server: received message");
+		serverLogicThread = new Thread(new ServerSpawnThread(this, request)); 
+		//priorities are set low to make shutdown occur in a timely manner
+		serverLogicThread.setPriority(Thread.MIN_PRIORITY);
+		serverLogicThread.start();
+		numberOfMessagesBeingProcessed++;
+	}
+
+	/**
+	 * decrememnt the number of messages being processed when done
+	 */
+	public void messageProcessed(){
+		numberOfMessagesBeingProcessed--;
+	}
+
+	/**
+	 *  returns the number of messages currently being processed
+	 *  
+	 * @return the number of messages currently being processed
+	 */
+	private int getNumberOfMessagesBeingProcessed() {
+		return numberOfMessagesBeingProcessed;
+	}
 
 	/**
 	 *Return the data in the datagram packet received
@@ -87,6 +147,18 @@ public class Server {
 		receiveSocket.receive(receivePacket);
 		return receivePacket;
 	}
+	
+	public void pause(){
+		if(PAUSES_ON){
+			try {
+				Thread.sleep(PAUSE_MILLISECONDS);
+			} catch (InterruptedException e) {
+				System.out.println("Server interrupted while pausing execution");
+				e.printStackTrace();
+				System.exit(1);
+			}
+		}
+	}
 
 	/**
 	 * main method for server program containing specified server algorithm
@@ -105,19 +177,34 @@ public class Server {
 			System.exit(1);
 		}
 
-		/*Recieve packet and create a thread to handle the request*/
-		while(true) {
+		//create thread to handle user commands
+		Thread serverQuitThread = new Thread(new ServerQuitRunnable(server));
+		//priority is set high to make shutdown occur in a timely manner
+		serverQuitThread.setPriority(Thread.MAX_PRIORITY);
+		serverQuitThread.start();    
+		
+		System.out.println("Enter 'quit' to begin server shutdown procedures");
+
+		/*Recieve packet and create a thread to handle the request.
+		 * Do this while the server is not trying to shut down*/
+		while(!server.isQuitTime()) {
 			DatagramPacket request = null;
 			try {
 				request = server.waitReceiveMessage();
+			} catch (SocketException e){
+				System.out.println("\nSocketException: server receive socket closed");
+				break;
 			} catch (IOException e) {
 				System.err.println("IOException: I/O error occured while server waiting to receive message");
 				e.printStackTrace();
 				System.exit(1);
 			}
-			
-			serverLogicThread = new Thread(new ServerSpawnThread(server, request));       
-			serverLogicThread.start();
+
+			server.newMessageToProcess(request);
 		}
+		//server now shuting down, do not stop until no more messages are being processed
+		while(server.getNumberOfMessagesBeingProcessed() != 0){}
+		System.out.println("\nServer successfully quit due to user command");
+		System.exit(0);
 	}
 }

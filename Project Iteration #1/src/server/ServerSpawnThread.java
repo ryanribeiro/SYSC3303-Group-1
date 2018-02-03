@@ -8,13 +8,6 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 
-/**
-* A thread class that is spawned whenever a client sends a request to the server. The thread
-* will parse through the request and determine if it is a read or write request, or throw
-* an exception if it is neither. It will then send an appropriate response back to the client
-*
-*@author Kevin Sun Luke Newton
-**/
 public class ServerSpawnThread implements Runnable{	
 	//the message to process and respond to
 	private DatagramPacket receivePacket;
@@ -27,7 +20,7 @@ public class ServerSpawnThread implements Runnable{
 	//mode acquired from packet
 	private String mode;
 	//reference to the server object to use as a lock
-	private Server serverLock;
+	private Server server;
 
 	//port number of client to send response to
 	private int clientPort;
@@ -44,7 +37,7 @@ public class ServerSpawnThread implements Runnable{
 		clientPort = receivePacket.getPort();
 		readRequest = false;
 		writeRequest = false;
-		serverLock = server;
+		this.server = server;
 	}
 
 	/**
@@ -53,11 +46,13 @@ public class ServerSpawnThread implements Runnable{
 	 */
 	public void run(){
 		/*synchronize on a common object so we only process one message at a time.
-		 * primarily so the console prints info for a single message at once*/
-		synchronized(serverLock){
+		 * primarily so the console prints ll info for a single message at once*/
+		synchronized(server){
 			//print data received from client
-			System.out.print("Server received message: \nFrom ");
+			System.out.print("Server: message from \n");
 			printPacketInfo(receivePacket);
+			
+			server.pause();
 			
 			/*check if message is proper format*/
 			try {
@@ -68,8 +63,9 @@ public class ServerSpawnThread implements Runnable{
 				System.out.println("Invalid message Contents:");
 				printPacketInfo(receivePacket);
 				System.exit(1);
-			}           
-
+			}         
+			
+			server.pause();
 			/*send response*/
 			try {
 				sendPacket(receivePacket); 
@@ -78,7 +74,10 @@ public class ServerSpawnThread implements Runnable{
 				System.err.println("IOException: I/O exception occured while sending message");
 				e.printStackTrace();
 				System.exit(1);
-			}   
+			}  
+			server.pause();
+			
+			server.messageProcessed();
 		}
 	}
 
