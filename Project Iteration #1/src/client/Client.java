@@ -130,9 +130,10 @@ public class Client {
 			
 			//Analyzing packet data for OP codes
 			byte[] opCode = {buffer[0], buffer[1]};
-			
+			byte[] blockID = {buffer[2], buffer[3]};
 			try {
 				byteBlock.write(opCode);
+				acknowledge(blockID);
 			} catch (IOException e) {
 				System.err.println("Failed to write OP code");	
 				e.printStackTrace();
