@@ -86,8 +86,7 @@ public class Server {
 	}
 	
 	//TFTP methods
-	public void sendData(String filename) {
-		
+	public void sendData(String filename) {		
 		byte[] bytesReadIn = readFile(filename);
 		
 		sendFile(bytesReadIn);
@@ -127,6 +126,11 @@ public class Server {
 		for (i = 0; i < numBlocks; i++) {
 			try {
 				DatagramPacket receiveAcknowledgement = waitRecieveMessage();
+				byte[] ACKData = receiveAcknowledgement.getData();
+				if (ACKData[2] != (byte) ((blockID - 1) & 0xFF) || ACKData[3] != (((blockID - 1) >> 8) & 0xFF)) {
+					System.err.println("ACK message failed.");
+					System.exit(1);
+				}
 			} catch (IOException e) {
 				System.err.println("IOException: I/O error occured while server waiting to recieve message");
 				e.printStackTrace();
@@ -136,7 +140,6 @@ public class Server {
 				e.printStackTrace();
 				System.exit(1);
 			}			
-			
 			//This makes the stuff to send
 			ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
 			bytesToSend.write(0);
