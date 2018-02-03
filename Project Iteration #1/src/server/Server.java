@@ -33,6 +33,15 @@ public class Server {
 	private static final int MAX_PACKET_SIZE = 100;
 	//max number of bytes in a file being sent
 	private static final int MAX_BYTES_IN_FILE = 65536;
+	//max block size as an int
+	private static final int MAX_BLOCK_SIZE = 512;
+	
+	//TFTP OP code
+	private static final byte OP_RRQ = 1;
+	private static final byte OP_WRQ = 2;
+	private static final byte OP_DATAPACKET = 3;
+	private static final byte OP_ACK = 4;
+	private static final byte OP_ERROR = 5;
 
 	//socket to receive messages
 	private DatagramSocket recieveSocket, sendSocket;
@@ -108,8 +117,58 @@ public class Server {
 		return buffer; 
 	}
 	public void sendFile(byte[] bytesReadIn) {
+		//loop control variables
+		int i = 0, j = 0;
+		//number of packets sent by the server
+		int packetSentCount = 0;
+		byte[] opCode = {0, OP_DATAPACKET};
+		int blockID = 1;
+		
+		int numBlocks = (bytesReadIn.length / MAX_BLOCK_SIZE);
+		int numRemainder = bytesReadIn.length % MAX_BLOCK_SIZE;
+		
+				
+		for (i = 0; i < numBlocks; i++) {
+			
+			ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
+			bytesToSend.write(0);
+			bytesToSend.write(OP_DATAPACKET);
+			bytesToSend.write((byte) (blockID & 0xFF));
+			bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
+			for (j = MAX_BLOCK_SIZE * i; j < bytesReadIn.length; j++) {
+				bytesToSend.write(bytesReadIn[j]);
+			}
+			byte[] data = bytesToSend.toByteArray();
+			try {
+				DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), getClientPort());
+			} catch (UnknownHostException e) {
+				System.err.println("UnknownHostException: could not determine IP address of host.");
+				e.printStackTrace();
+			}
+			blockID++;
+		}
 		
 		
+		//Final packet either empty (0) or remaining bytes
+		ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
+		bytesToSend.write(0);
+		bytesToSend.write(OP_DATAPACKET);
+		bytesToSend.write((byte) (blockID & 0xFF));
+		bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
+		if (numRemainder == 0) {
+			bytesToSend.write((0));
+		} else {
+			for (i = MAX_BLOCK_SIZE * numBlocks; i < bytesReadIn.length; i++) {
+				bytesToSend.write(bytesReadIn[i]);
+			}
+		}
+		byte[] data = bytesToSend.toByteArray();
+		try {
+			DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), getClientPort());
+		} catch (UnknownHostException e) {
+			System.err.println("UnknownHostException: could not determine IP address of host.");
+			e.printStackTrace();
+		}
 	}
 
 	/**
