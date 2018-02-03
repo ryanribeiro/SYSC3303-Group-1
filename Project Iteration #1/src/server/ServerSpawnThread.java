@@ -8,6 +8,11 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 
+/**
+* A thread class that is spawned whenever a client sends a request to the server. The thread
+* will parse through the request and determine if it is a read or write request, or throw
+* an exception if it is neither. It will then send an appropriate response back to the client
+**/
 public class ServerSpawnThread implements Runnable{	
 	//the message to process and respond to
 	private DatagramPacket receivePacket;
@@ -46,7 +51,7 @@ public class ServerSpawnThread implements Runnable{
 	 */
 	public void run(){
 		/*synchronize on a common object so we only process one message at a time.
-		 * primarily so the console prints ll info for a single message at once*/
+		 * primarily so the console prints info for a single message at once*/
 		synchronized(serverLock){
 			//print data received from client
 			System.out.print("Server received message: \nFrom ");
