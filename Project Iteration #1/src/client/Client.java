@@ -6,7 +6,10 @@ import java.net.DatagramPacket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.Arrays;
 
 /**
@@ -32,25 +35,142 @@ public class Client {
 	//Milliseconds until client times out while waiting for response
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 
+	//TFTP OP code
+	private static final byte OP_RRQ = 1;
+	private static final byte OP_DATAPACKET = 3;
+	private static final byte OP_ACK = 4;
+	private static final byte OP_ERROR = 5;
+	
+	//TFTP Address
+	private static final String TFTP_SERVER_IP = "192.168.1.11";
+	private static final int TFTP_DEFAULT_PORT = 69;
+	private InetAddress inetAddress = null;
+	
+	//TFTP data
+	private byte[] request;
+	private byte[] buffer;
+	
 	//socket used by client to send and receive datagrams
 	private DatagramSocket sendRecieveSocket;
 	//place to store response from intermediate host
-	private DatagramPacket recievePacket;
+	private DatagramPacket receivePacket;
+	private DatagramPacket sendPacket;
 
 	/**Constructor
 	 * @throws SocketException indicates failed to create socket for client
 	 * */
 	public Client() throws SocketException {
+		//TFTP
+		try {
+			inetAddress = InetAddress.getByName(TFTP_SERVER_IP);
+		} catch (UnknownHostException e) {
+			System.out.println("Failed to initalize TFTP Server IP");
+			e.printStackTrace();
+		}
+		
 		//attempt to create socket for send and receive
 		sendRecieveSocket = new DatagramSocket();
 		//turn on timeout if required
 		if(TIMEOUTS_ON)
 			sendRecieveSocket.setSoTimeout(TIMEOUT_MILLISECONDS);
 
+		
 		//create packet of max size to guarantee it fits a received message
-		recievePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
+		//receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
+	}
+	
+	//Trivial File Transfer Protocol Methods
+	private void getData(String fileName) {
+		//Preparing the send packet
+		request = createPacketData(fileName, MODE, RequestType.read);
+		sendPacket = new DatagramPacket(request, request.length, inetAddress, TFTP_DEFAULT_PORT);
+		
+		//Sending packet request
+		try {
+			sendMessage(sendPacket);
+		} catch (IOException e) {
+			System.out.println("Failed to send packet read request");
+			e.printStackTrace();
+		}
+		
+		//Receive file from TFTP server
+		 ByteArrayOutputStream receivedByte = receiveFile();
+		
+		 //Write File
+		 writeFile(fileName, receivedByte);
 	}
 
+	private void writeFile(String fileName, ByteArrayOutputStream receivedByte) {
+		try {
+			OutputStream outputStream = new FileOutputStream(fileName);
+			receivedByte.writeTo(outputStream);
+		} catch (IOException e) {
+			System.out.println("Failed to write the file.");
+			e.printStackTrace();
+		}
+		
+	}
+
+	private ByteArrayOutputStream receiveFile(){
+		ByteArrayOutputStream byteBlock = new ByteArrayOutputStream();
+		int packetCount = 1;
+		
+		do {
+			System.out.println("Number of TFTP packets receieved: "  + packetCount);
+			packetCount++;
+			buffer = new byte[MAX_PACKET_SIZE];
+			receivePacket = new DatagramPacket(buffer, buffer.length, inetAddress, sendRecieveSocket.getLocalPort());
+			
+			try {
+				sendRecieveSocket.receive(receivePacket);
+			} catch (IOException e) {
+				System.out.println("Receive socket has failed to receive packet from server.");
+				e.printStackTrace();
+			}
+			
+			//Analyzing packet data for OP codes
+			byte[] opCode = {buffer[0], buffer[1]};
+			
+ 			if(opCode[1] == OP_ERROR) {
+ 				//report the error
+ 				String errorCode = new String(buffer, 3, 1);
+ 				System.out.println("Error due to code: " + errorCode);
+ 			}
+ 			else if(opCode[1] == OP_DATAPACKET) {
+ 				byte[] blockID = {buffer[2], buffer[3]};
+ 				DataOutputStream fileWrite = new DataOutputStream(byteBlock);
+ 				try {
+					fileWrite.write(receivePacket.getData(), 4, receivePacket.getLength() - 4);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+ 				
+ 				Acknowledge(blockID);
+ 			}
+		}while(checkLastPacket(receivePacket));
+		return byteBlock;
+	}
+	
+	private void Acknowledge(byte[] blockID) {
+		byte[] ack = {0, OP_ACK, blockID[0], blockID[1]};
+		DatagramPacket acknowledgePacket = new DatagramPacket(ack, ack.length, inetAddress, receivePacket.getPort());
+		try {
+			sendRecieveSocket.send(acknowledgePacket);
+		} catch (IOException e) {
+			System.out.println("Failed to send acknowledge Packet from Client");
+			e.printStackTrace();
+		}
+	
+	}
+	
+	private boolean checkLastPacket(DatagramPacket receivedPacket) {
+		if(receivedPacket.getLength() < 512)
+			return true;
+		else
+			return false;
+	}
+	//End of TFTP methods
+	
 	/**
 	 * closes the socket for the client
 	 */
@@ -64,7 +184,7 @@ public class Client {
 	 * @return  the data in the datagram packet received
 	 */
 	public byte[] getRecievePacketData(){
-		return recievePacket.getData();
+		return receivePacket.getData();
 	}
 
 	/**
@@ -108,8 +228,8 @@ public class Client {
 	 * @return returns the receive datagram packet
 	 */
 	public DatagramPacket waitRecieveMessage() throws IOException{
-		sendRecieveSocket.receive(recievePacket);	
-		return recievePacket;
+		sendRecieveSocket.receive(receivePacket);	
+		return receivePacket;
 	}
 	
 	/**
