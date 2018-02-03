@@ -123,13 +123,10 @@ public class Server {
 		
 		int numBlocks = (bytesReadIn.length / MAX_BLOCK_SIZE);
 		int numRemainder = bytesReadIn.length % MAX_BLOCK_SIZE;
-		
-		DatagramPacket receiveAcknowledgement;
-		byte[] buffer;
 				
 		for (i = 0; i < numBlocks; i++) {
 			try {
-				receiveAcknowledgement = waitRecieveMessage();
+				DatagramPacket receiveAcknowledgement = waitRecieveMessage();
 			} catch (IOException e) {
 				System.err.println("IOException: I/O error occured while server waiting to recieve message");
 				e.printStackTrace();
@@ -138,8 +135,9 @@ public class Server {
 				System.err.println("InvalidMessageFormatException: received message is of invalid format");
 				e.printStackTrace();
 				System.exit(1);
-			}
+			}			
 			
+			//This makes the stuff to send
 			ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
 			bytesToSend.write(0);
 			bytesToSend.write(OP_DATAPACKET);
@@ -151,6 +149,13 @@ public class Server {
 			byte[] data = bytesToSend.toByteArray();
 			try {
 				DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), getClientPort());
+				try {
+					sendMessage(sendPacket);
+				} catch (IOException e) {
+					System.err.println("IOException: I/O error occured while sending server was message.");
+					e.printStackTrace();
+					System.exit(1);
+				}
 			} catch (UnknownHostException e) {
 				System.err.println("UnknownHostException: could not determine IP address of host.");
 				e.printStackTrace();
