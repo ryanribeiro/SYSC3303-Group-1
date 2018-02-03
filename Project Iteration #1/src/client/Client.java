@@ -125,7 +125,7 @@ public class Client {
 		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
 		System.out.println("Message length: " + packet.getLength());
 		System.out.println("Containing: " + new String(dataAsByteArray));
-		System.out.println("Conents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
+		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
 	}
 
 	/**
