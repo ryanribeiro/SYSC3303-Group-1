@@ -83,7 +83,7 @@ public class Client {
 	//Trivial File Transfer Protocol Methods
 	private void getData(String fileName) {
 		//Preparing the send packet
-		request = createPacketData(fileName, MODE, RequestType.read);
+		request = createPacketData(fileName, MODE, OP_RRQ);
 		sendPacket = new DatagramPacket(request, request.length, inetAddress, TFTP_DEFAULT_PORT);
 		
 		//Sending packet request
@@ -191,16 +191,16 @@ public class Client {
 	 * 
 	 * @param filename filename to send with the read request
 	 * @param mode the mode to send with the read request
-	 * @param type a RequestType enum for the type of request to send
+	 * @param type a OP_Code for the type of request to send
 	 * @return the message converted into a byte array with proper format
 	 */
-	public static byte[] createPacketData(String filename, String mode, RequestType type) {
+	public static byte[] createPacketData(String filename, String mode, byte OP_Code) {
 		ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
 
 		byteStream.write(0);
-		if(type == RequestType.read)
+		if(OP_Code == 1)
 			byteStream.write(1);
-		else if (type == RequestType.write)
+		else if (OP_Code == 2)
 			byteStream.write(2);
 		byteStream.write(filename.getBytes(), 0, filename.getBytes().length);
 		byteStream.write(0);
@@ -277,11 +277,11 @@ public class Client {
 				
 			} else if(i % 2 == 0) {
 				//read request
-				requestData = createPacketData(FILENAME, MODE, RequestType.read);
+				requestData = createPacketData(FILENAME, MODE, OP_RRQ);
 				
 			} else {
 				//write request
-				requestData = createPacketData(FILENAME, MODE, RequestType.write);
+				requestData = createPacketData(FILENAME, MODE, OP_WRQ);
 			}
 
 			//create packet to send to intermediate host on specified port
