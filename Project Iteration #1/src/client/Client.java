@@ -37,6 +37,7 @@ public class Client {
 
 	//TFTP OP code
 	private static final byte OP_RRQ = 1;
+	private static final byte OP_WRQ = 2;
 	private static final byte OP_DATAPACKET = 3;
 	private static final byte OP_ACK = 4;
 	private static final byte OP_ERROR = 5;
