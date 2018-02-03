@@ -131,26 +131,16 @@ public class Client {
 			//Analyzing packet data for OP codes
 			byte[] opCode = {buffer[0], buffer[1]};
 			
- 			if(opCode[1] == OP_ERROR) {
- 				//report the error
- 				String errorCode = new String(buffer, 3, 1);
- 				System.out.println("Error due to code: " + errorCode);
- 			}
- 			else if(opCode[1] == OP_DATAPACKET) {
- 				byte[] blockID = {buffer[2], buffer[3]};
- 				DataOutputStream fileWrite = new DataOutputStream(byteBlock);
- 				try {
-					fileWrite.write(receivePacket.getData(), 4, receivePacket.getLength() - 4);
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
- 				
- 				acknowledge(blockID);
- 			}
+			try {
+				byteBlock.write(opCode);
+			} catch (IOException e) {
+				System.err.println("Failed to write OP code");	
+				e.printStackTrace();
+			}
 		}while(!checkLastPacket(receivePacket));
 		return byteBlock;
 	}
-	
+		
 	private void acknowledge(byte[] blockID) {
 		byte[] ack = {0, OP_ACK, blockID[0], blockID[1]};
 		DatagramPacket acknowledgePacket = new DatagramPacket(ack, ack.length, inetAddress, receivePacket.getPort());
