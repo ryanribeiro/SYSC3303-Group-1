@@ -7,10 +7,16 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
+
+import server.InvalidMessageFormatException;
 
 /**
  * a class representing the client for the server-client-intermediate host system. has
@@ -34,6 +40,8 @@ public class Client {
 	private static final boolean TIMEOUTS_ON = true;
 	//Milliseconds until client times out while waiting for response
 	private static final int TIMEOUT_MILLISECONDS = 5000;
+	//max block size as an int
+	private static final int MAX_BLOCK_SIZE = 512;
 
 	//TFTP OP code
 	private static final byte OP_RRQ = 1;
@@ -67,6 +75,7 @@ public class Client {
 		} catch (UnknownHostException e) {
 			System.out.println("Failed to initalize TFTP Server IP");
 			e.printStackTrace();
+			System.exit(1);
 		}
 		
 		//attempt to create socket for send and receive
@@ -99,6 +108,7 @@ public class Client {
 		} catch (IOException e) {
 			System.out.println("Failed to send packet read request");
 			e.printStackTrace();
+			System.exit(1);
 		}
 		
 		//Receive file from TFTP server
@@ -123,6 +133,7 @@ public class Client {
 		} catch (IOException e) {
 			System.out.println("Failed to write the file.");
 			e.printStackTrace();
+			System.exit(1);
 		}		
 	}
 
@@ -147,6 +158,7 @@ public class Client {
 			} catch (IOException e) {
 				System.out.println("Receive socket has failed to receive packet from server.");
 				e.printStackTrace();
+				System.exit(1);
 			}
 			
 			//Analyzing packet data for OP codes
@@ -158,6 +170,7 @@ public class Client {
 			} catch (IOException e) {
 				System.err.println("Failed to write OP code");	
 				e.printStackTrace();
+				System.exit(1);
 			}
 		}while(!checkLastPacket(receivePacket));
 		return byteBlock;
@@ -178,6 +191,7 @@ public class Client {
 		} catch (IOException e) {
 			System.out.println("Failed to send acknowledge Packet from Client");
 			e.printStackTrace();
+			System.exit(1);
 		}	
 	}
 	
@@ -194,6 +208,134 @@ public class Client {
 		else
 			return false;
 	}
+	//END of RRQ
+	
+	//WRQ
+	private void sendData(String filename) {
+		//Preparing the send packet
+		request = createPacketData(filename, MODE, OP_WRQ);
+		sendPacket = new DatagramPacket(request, request.length, inetAddress, TFTP_DEFAULT_PORT);
+		DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
+		
+		//Sending packet request
+		try {
+			sendMessage(sendPacket);
+		} catch (IOException e) {
+			System.out.println("Failed to send packet read request");
+			e.printStackTrace();
+			System.exit(1);
+		}
+		
+		try {
+			sendRecieveSocket.receive(receivePacket);
+			byte[] receivedACK = receivePacket.getData();
+			if (receivedACK[0] != (byte) 0 && receivedACK[1] != (byte) 0) {
+				//invalid ACK packet
+				System.out.println("Acknowledgement Packet from server is incorrect.");
+				System.exit(1);
+			}
+		} catch (IOException e) {
+			System.out.println("Failed to receive acknowledge Packet from server.");
+			e.printStackTrace();
+			System.exit(1);
+		}
+		
+		byte[] bytesReadIn = readFile(filename);
+		sendFile(bytesReadIn);		
+	}
+	
+	public byte[] readFile(String filename) { 
+		File file = new File(filename);
+		byte[] buffer = new byte[(int) file.length()];		
+		try {
+			InputStream input = new FileInputStream(file);
+			try {
+				input.read(buffer);
+			} catch (IOException e) {
+				System.out.println("Failed to read the file.");
+				e.printStackTrace();
+			}
+			try {
+				input.close();
+			} catch (IOException e) {
+				System.out.println("Failed to close file InputStream.");
+				e.printStackTrace();
+			}
+		} catch (FileNotFoundException e) {
+			System.out.println("Failed to find the file.");
+			e.printStackTrace();
+		}		
+		return buffer; 
+	}
+	public void sendFile(byte[] bytesReadIn) {
+		//loop control variables
+		int i = 0, j = 0;
+		int blockID = 1;
+		
+		int numBlocks = (bytesReadIn.length / MAX_BLOCK_SIZE);
+		int numRemainder = bytesReadIn.length % MAX_BLOCK_SIZE;
+				
+		for (i = 0; i < numBlocks; i++) {
+			try {
+				DatagramPacket receiveAcknowledgement = waitRecieveMessage();
+				byte[] ACKData = receiveAcknowledgement.getData();
+				if (ACKData[2] != (byte) ((blockID - 1) & 0xFF) || ACKData[3] != (((blockID - 1) >> 8) & 0xFF)) {
+					System.err.println("ACK message failed.");
+					System.exit(1);
+				}
+			} catch (IOException e) {
+				System.err.println("IOException: I/O error occured while server waiting to recieve message");
+				e.printStackTrace();
+				System.exit(1);
+			}			
+			//This makes the stuff to send
+			ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
+			bytesToSend.write(0);
+			bytesToSend.write(OP_DATAPACKET);
+			bytesToSend.write((byte) (blockID & 0xFF));
+			bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
+			for (j = MAX_BLOCK_SIZE * i; j < bytesReadIn.length; j++) {
+				bytesToSend.write(bytesReadIn[j]);
+			}
+			byte[] data = bytesToSend.toByteArray();
+			try {
+				DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), INTERMEDIATE_HOST_PORT_NUMBER);
+				try {
+					sendMessage(sendPacket);
+				} catch (IOException e) {
+					System.err.println("IOException: I/O error occured while sending server was message.");
+					e.printStackTrace();
+					System.exit(1);
+				}
+			} catch (UnknownHostException e) {
+				System.err.println("UnknownHostException: could not determine IP address of host.");
+				e.printStackTrace();
+			}
+			blockID++;
+		}	
+		
+		//Final packet either empty (0) or remaining bytes
+		ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
+		bytesToSend.write(0);
+		bytesToSend.write(OP_DATAPACKET);
+		bytesToSend.write((byte) (blockID & 0xFF));
+		bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
+		if (numRemainder == 0) {
+			bytesToSend.write((0));
+		} else {
+			for (i = MAX_BLOCK_SIZE * numBlocks; i < bytesReadIn.length; i++) {
+				bytesToSend.write(bytesReadIn[i]);
+			}
+		}
+		byte[] data = bytesToSend.toByteArray();
+		try {
+			DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), INTERMEDIATE_HOST_PORT_NUMBER);
+		} catch (UnknownHostException e) {
+			System.err.println("UnknownHostException: could not determine IP address of host.");
+			e.printStackTrace();
+		}
+	}
+	//END of WRQ
 	//End of TFTP methods
 	
 	/**

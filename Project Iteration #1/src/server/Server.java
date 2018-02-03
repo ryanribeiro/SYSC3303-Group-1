@@ -1,6 +1,5 @@
 package server;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -12,7 +11,6 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
 import java.util.Arrays;
 
 /**
@@ -31,8 +29,6 @@ public class Server {
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//max size for data in a DatagramPacket
 	private static final int MAX_PACKET_SIZE = 516;
-	//max number of bytes in a file being sent
-	private static final int MAX_BYTES_IN_FILE = 65536;
 	//max block size as an int
 	private static final int MAX_BLOCK_SIZE = 512;
 	
@@ -86,6 +82,7 @@ public class Server {
 	}
 	
 	//TFTP methods
+	//RRQ
 	public void sendData(String filename) {		
 		byte[] bytesReadIn = readFile(filename);
 		
@@ -164,8 +161,7 @@ public class Server {
 				e.printStackTrace();
 			}
 			blockID++;
-		}
-		
+		}	
 		
 		//Final packet either empty (0) or remaining bytes
 		ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
@@ -188,6 +184,11 @@ public class Server {
 			e.printStackTrace();
 		}
 	}
+	//END of RRQ
+	
+	//WRQ
+	
+	//END of WRQ
 
 	/**
 	 *Return the data in the datagram packet received
