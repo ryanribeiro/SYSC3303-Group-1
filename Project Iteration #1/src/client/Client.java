@@ -108,8 +108,7 @@ public class Client {
 		} catch (IOException e) {
 			System.out.println("Failed to write the file.");
 			e.printStackTrace();
-		}
-		
+		}		
 	}
 
 	private ByteArrayOutputStream receiveFile(){
@@ -146,13 +145,13 @@ public class Client {
 					e.printStackTrace();
 				}
  				
- 				Acknowledge(blockID);
+ 				acknowledge(blockID);
  			}
 		}while(checkLastPacket(receivePacket));
 		return byteBlock;
 	}
 	
-	private void Acknowledge(byte[] blockID) {
+	private void acknowledge(byte[] blockID) {
 		byte[] ack = {0, OP_ACK, blockID[0], blockID[1]};
 		DatagramPacket acknowledgePacket = new DatagramPacket(ack, ack.length, inetAddress, receivePacket.getPort());
 		try {
@@ -160,8 +159,7 @@ public class Client {
 		} catch (IOException e) {
 			System.out.println("Failed to send acknowledge Packet from Client");
 			e.printStackTrace();
-		}
-	
+		}	
 	}
 	
 	private boolean checkLastPacket(DatagramPacket receivedPacket) {
