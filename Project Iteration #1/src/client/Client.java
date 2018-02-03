@@ -148,7 +148,7 @@ public class Client {
  				
  				Acknowledge(blockID);
  			}
-		}while(checkLastPacket(receivePacket));
+		}while(!checkLastPacket(receivePacket));
 		return byteBlock;
 	}
 	
