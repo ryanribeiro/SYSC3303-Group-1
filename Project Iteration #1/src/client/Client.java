@@ -22,7 +22,7 @@ import java.util.Arrays;
 public class Client {
 	//number of times client algorithm repeats in main
 	private static final int NUMBER_OF_CLIENT_MAIN_ITERATIONS = 11;
-	//port number of intermediate host
+	//port number of intermediate host (ErrorSimulator)
 	private static final int INTERMEDIATE_HOST_PORT_NUMBER = 23;
 	//max size for data in a DatagramPacket
 	private static final int MAX_PACKET_SIZE = 516;
