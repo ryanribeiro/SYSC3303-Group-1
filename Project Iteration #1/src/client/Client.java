@@ -81,6 +81,13 @@ public class Client {
 	}
 	
 	//Trivial File Transfer Protocol Methods
+	
+	/**
+	 * Gets the data from file
+	 * 
+	 * @param filename filename to send with the read request
+	 * @return none
+	 */
 	private void getData(String fileName) {
 		//Preparing the send packet
 		request = createPacketData(fileName, MODE, OP_RRQ);
@@ -101,6 +108,14 @@ public class Client {
 		 writeFile(fileName, receivedByte);
 	}
 
+	
+	/**
+	 * Writes data to file
+	 * 
+	 * @param filename filename to send with the read request
+	 * @param receivedByte byte array of data blocks received to write into file.
+	 * @return none
+	 */
 	private void writeFile(String fileName, ByteArrayOutputStream receivedByte) {
 		try {
 			OutputStream outputStream = new FileOutputStream(fileName);
@@ -111,6 +126,12 @@ public class Client {
 		}		
 	}
 
+	
+	/**
+	 * Parses the received packet into data blocks 
+	 * 
+	 * @return ByteArrayOutputStream the byte stream of data blocks received
+	 */
 	private ByteArrayOutputStream receiveFile(){
 		ByteArrayOutputStream byteBlock = new ByteArrayOutputStream();
 		int packetCount = 1;
@@ -142,6 +163,13 @@ public class Client {
 		return byteBlock;
 	}
 		
+	
+	/**
+	 * Acknowledges reception of server packet.
+	 * 
+	 * @param blockID byte array containing the block ID whose reception is acknowledged.
+	 * @return none
+	 */
 	private void acknowledge(byte[] blockID) {
 		byte[] ack = {0, OP_ACK, blockID[0], blockID[1]};
 		DatagramPacket acknowledgePacket = new DatagramPacket(ack, ack.length, inetAddress, receivePacket.getPort());
@@ -153,6 +181,13 @@ public class Client {
 		}	
 	}
 	
+	
+	/**
+	 * Checks if the packet recieved is the last packet for transmission
+	 * 
+	 * @param receivedPacket the packet received from the server
+	 * @return boolean	true if last packet, false otherwise.
+	 */
 	private boolean checkLastPacket(DatagramPacket receivedPacket) {
 		if(receivedPacket.getLength() < 512)
 			return true;
