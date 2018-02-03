@@ -25,7 +25,7 @@ public class Client {
 	//port number of intermediate host
 	private static final int INTERMEDIATE_HOST_PORT_NUMBER = 23;
 	//max size for data in a DatagramPacket
-	private static final int MAX_PACKET_SIZE = 100;
+	private static final int MAX_PACKET_SIZE = 516;
 	//file name to send to server
 	private static final String FILENAME = "test.txt";
 	//mode to send to server
@@ -130,13 +130,23 @@ public class Client {
 			
 			//Analyzing packet data for OP codes
 			byte[] opCode = {buffer[0], buffer[1]};
-			try {
-				byteBlock.write(opCode);
-			} catch (IOException e1) {
-				System.err.println("Failed to retrieve OP Code");
-				e1.printStackTrace();
-			}
-		
+			
+ 			if(opCode[1] == OP_ERROR) {
+ 				//report the error
+ 				String errorCode = new String(buffer, 3, 1);
+ 				System.out.println("Error due to code: " + errorCode);
+ 			}
+ 			else if(opCode[1] == OP_DATAPACKET) {
+ 				byte[] blockID = {buffer[2], buffer[3]};
+ 				DataOutputStream fileWrite = new DataOutputStream(byteBlock);
+ 				try {
+					fileWrite.write(receivePacket.getData(), 4, receivePacket.getLength() - 4);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+ 				
+ 				acknowledge(blockID);
+ 			}
 		}while(!checkLastPacket(receivePacket));
 		return byteBlock;
 	}

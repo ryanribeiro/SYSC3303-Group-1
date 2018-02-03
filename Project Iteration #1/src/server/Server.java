@@ -30,7 +30,7 @@ public class Server {
 	//Milliseconds until server times out while waiting for response
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//max size for data in a DatagramPacket
-	private static final int MAX_PACKET_SIZE = 100;
+	private static final int MAX_PACKET_SIZE = 516;
 	//max number of bytes in a file being sent
 	private static final int MAX_BYTES_IN_FILE = 65536;
 	//max block size as an int
@@ -119,16 +119,26 @@ public class Server {
 	public void sendFile(byte[] bytesReadIn) {
 		//loop control variables
 		int i = 0, j = 0;
-		//number of packets sent by the server
-		int packetSentCount = 0;
-		byte[] opCode = {0, OP_DATAPACKET};
 		int blockID = 1;
 		
 		int numBlocks = (bytesReadIn.length / MAX_BLOCK_SIZE);
 		int numRemainder = bytesReadIn.length % MAX_BLOCK_SIZE;
 		
+		DatagramPacket receiveAcknowledgement;
+		byte[] buffer;
 				
 		for (i = 0; i < numBlocks; i++) {
+			try {
+				receiveAcknowledgement = waitRecieveMessage();
+			} catch (IOException e) {
+				System.err.println("IOException: I/O error occured while server waiting to recieve message");
+				e.printStackTrace();
+				System.exit(1);
+			} catch (InvalidMessageFormatException e) {
+				System.err.println("InvalidMessageFormatException: received message is of invalid format");
+				e.printStackTrace();
+				System.exit(1);
+			}
 			
 			ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
 			bytesToSend.write(0);
