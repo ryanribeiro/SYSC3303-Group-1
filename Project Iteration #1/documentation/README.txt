@@ -97,14 +97,14 @@ Cameron:
 - Refactoring original server/client code from assignment 0 to iteration 1
 
 Kevin:
-- Segments of code from assignment 0 used in iteration 1
+- Segments of code from assignment 1 used in iteration 1
 - Implemented multi-threading in server
 
 Luke:
-- Majority of code from assignment 0 used in iteration 1
+- Majority of code from assignment 1 used in iteration 1
 - Implemented server shut down
-- Worked on unit testing
-- UCM diagram
+-- helped with server multi-threading
+
 
 Ryan:
 - Implemented steady-state file transfer/TFTP protocols between client and server
