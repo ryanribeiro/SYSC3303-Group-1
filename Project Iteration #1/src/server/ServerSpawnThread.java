@@ -13,6 +13,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 
 public class ServerSpawnThread implements Runnable{	
 	//the message to process and respond to
@@ -88,18 +89,18 @@ public class ServerSpawnThread implements Runnable{
 				printPacketInfo(receivePacket);
 				System.exit(1);
 			}         
-			
-			server.pause();
-			/*send response*/
-			try {
-				sendPacket(receivePacket); 
-			} catch (IOException e) {
-				//failed to determine the host IP address
-				System.err.println("IOException: I/O exception occured while sending message");
-				e.printStackTrace();
-				System.exit(1);
-			}  
-			server.pause();
+//			
+//			server.pause();
+//			/*send response*/
+//			try {
+//				sendPacket(receivePacket); 
+//			} catch (IOException e) {
+//				//failed to determine the host IP address
+//				System.err.println("IOException: I/O exception occured while sending message");
+//				e.printStackTrace();
+//				System.exit(1);
+//			}  
+//			server.pause();
 			
 			server.messageProcessed();
 		}
@@ -169,21 +170,23 @@ public class ServerSpawnThread implements Runnable{
 		
 		//Looping through the number of blocks that will be sent
 		for (i = 0; i < numBlocks; i++) {
-			try {
-				//Requires acknowledgement before sending the next DATA packet
-				DatagramPacket receiveAcknowledgement = server.waitReceiveMessage();
-				byte[] ACKData = receiveAcknowledgement.getData();
-				//Checks the acknowledgement is for the correct block
-				//Bitwise operations are to get the last 2 bytes of the 4 byte long integer
-				if (ACKData[2] != (byte) ((blockID - 1) & 0xFF) || ACKData[3] != (((blockID - 1) >> 8) & 0xFF)) {
-					System.err.println("Acknowledge message failed.");
+			if (i != 0) {
+				try {
+					//Requires acknowledgement before sending the next DATA packet
+					DatagramPacket receiveAcknowledgement = server.waitReceiveMessage();
+					byte[] ACKData = receiveAcknowledgement.getData();
+					//Checks the acknowledgement is for the correct block
+					//Bitwise operations are to get the last 2 bytes of the 4 byte long integer
+					if (ACKData[2] != (byte) ((blockID - 1) & 0xFF) || ACKData[3] != (((blockID - 1) >> 8) & 0xFF)) {
+						System.err.println("Acknowledge message failed.");
+						System.exit(1);
+					}
+				} catch (IOException e) {
+					System.err.println("IOException: I/O error occured while server waiting to recieve message");
+					e.printStackTrace();
 					System.exit(1);
-				}
-			} catch (IOException e) {
-				System.err.println("IOException: I/O error occured while server waiting to recieve message");
-				e.printStackTrace();
-				System.exit(1);
-			}		
+				}	
+			}
 			//ByteArrayOutputStream used to create a stream of bytes that will be sent in 516 byte DATA packets
 			ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
 			bytesToSend.write(0);
@@ -244,7 +247,7 @@ public class ServerSpawnThread implements Runnable{
 	}
 
 	/**
-	 * Receives the contents of a file from the server.
+	 * Receives the contents of a file from the client.
 	 * 
 	 * @param fileName
 	 * @author Joe Frederick Samuel, Ryan Ribeiro
@@ -295,7 +298,7 @@ public class ServerSpawnThread implements Runnable{
 				try {
 					server.getReceiveSocket().receive(receivePacket);
 				} catch (IOException e) {
-					System.out.println("Receive socket has failed to receive packet from server.");
+					System.out.println("Receive socket has failed to receive packet from client.");
 					e.printStackTrace();
 					System.exit(1);
 				}
@@ -408,7 +411,6 @@ public class ServerSpawnThread implements Runnable{
 
 			//Convert file name to byte array
 			fileName = textStream.toString();
-
 			/***********************************************
 			 * Check for some more text followed by a zero *
 			 ***********************************************/
@@ -448,19 +450,19 @@ public class ServerSpawnThread implements Runnable{
 	 * @throws IOException indicates and I/O error occurred while sending a message
 	 */
 	public void sendPacket(DatagramPacket packet) throws UnknownHostException, IOException{
-		/***********************
-		 * Create & Send Packet *
-		 ***********************/
-		byte[] responseData = this.createPacketData();
-
-		DatagramPacket sendPacket = new DatagramPacket(responseData, responseData.length,
-				InetAddress.getLocalHost(), clientPort);
+//		/***********************
+//		 * Create & Send Packet *
+//		 ***********************/
+//		byte[] responseData = this.createPacketData();
+//
+//		DatagramPacket sendPacket = new DatagramPacket(responseData, responseData.length,
+//				InetAddress.getLocalHost(), clientPort);
 
 		//print data to send to intermediate host
 		System.out.print("Server Response: \nTo ");
-		printPacketInfo(sendPacket);
+		printPacketInfo(packet);
 
-		sendMessage(sendPacket);
+		sendMessage(packet);
 
 		System.out.println("Server response sent");
 	}
