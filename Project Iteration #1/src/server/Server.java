@@ -1,22 +1,9 @@
 package server;
 
-
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.net.SocketException;
-
-import java.net.UnknownHostException;
-import java.util.Arrays;
 
 
 /**
@@ -24,7 +11,7 @@ import java.util.Arrays;
  * Capability to receive requests, and create threads to process and send appropriate 
  * responses
  * 
- * @author Luke Newton Kevin Sun
+ * @author Luke Newton, Kevin Sun, Joe Frederick Samuel, Ryan Ribeiro
  *
  */
 public class Server {
@@ -37,8 +24,6 @@ public class Server {
 	//max size for data in a DatagramPacket
 
 	private static final int MAX_PACKET_SIZE = 516;
-	//max block size as an int
-	private static final int MAX_BLOCK_SIZE = 512;
 
 	//change this to turn on/off pauses for the server request processing
 	private static final boolean PAUSES_ON = true;

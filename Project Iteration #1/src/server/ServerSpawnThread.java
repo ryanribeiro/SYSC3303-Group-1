@@ -73,6 +73,14 @@ public class ServerSpawnThread implements Runnable{
 			/*check if message is proper format*/
 			try {
 				parseMessage();
+				if (readRequest == true) {
+					sendData(fileName);
+				} else if (writeRequest == true){
+					getData(fileName);
+				} else {
+					System.err.println("Error: Request is neither a write or a read.");
+					System.exit(1);
+				}
 			} catch (InvalidMessageFormatException e) {
 				System.out.println("InvalidMessageFormatException: a message received was of an invalid format");
 				e.printStackTrace();
@@ -97,177 +105,186 @@ public class ServerSpawnThread implements Runnable{
 		}
 	}
 	
-	//TFTP methods
-		//RRQ
-		public void sendData(String filename) {		
-			byte[] bytesReadIn = readFile(filename);
-			
-			sendFile(bytesReadIn);
-		}
+	//Trivial File Transfer Protocol Methods
+	/**
+	 * Sends the contents of a file to the server.
+	 * 
+	 * @param filename the name of the file to be sent
+	 * @author Joe Frederick Samuel, Ryan Ribeiro
+	 */
+	public void sendData(String filename) {		
+		byte[] bytesReadIn = readFile(filename);
 		
-		public byte[] readFile(String filename) {
-			
-			File file = new File(filename);
-			byte[] buffer = new byte[(int) file.length()];		
+		sendFile(bytesReadIn);
+	}
+	
+	/**
+	 * Reads the contents of the file and stores it as an array of bytes.
+	 * 
+	 * @param filename the name of the file to be read
+	 * @return byte[] contains the contents of the file read in
+	 * @author Joe Frederick Samuel, Ryan Ribeiro
+	 */
+	public byte[] readFile(String filename) {
+		
+		File file = new File(filename);
+		byte[] buffer = new byte[(int) file.length()];		
+		try {
+			InputStream input = new FileInputStream(file);
 			try {
-				InputStream input = new FileInputStream(file);
-				try {
-					input.read(buffer);
-				} catch (IOException e) {
-					System.out.println("Failed to read the file.");
-					e.printStackTrace();
-				}
-				try {
-					input.close();
-				} catch (IOException e) {
-					System.out.println("Failed to close file InputStream.");
-					e.printStackTrace();
-				}
-			} catch (FileNotFoundException e) {
-				System.out.println("Failed to find the file.");
+				input.read(buffer);
+			} catch (IOException e) {
+				System.out.println("Failed to read the file.");
 				e.printStackTrace();
-			}		
-			return buffer; 
-		}
+			}
+			try {
+				input.close();
+			} catch (IOException e) {
+				System.out.println("Failed to close file InputStream.");
+				e.printStackTrace();
+			}
+		} catch (FileNotFoundException e) {
+			System.out.println("Failed to find the file.");
+			e.printStackTrace();
+		}		
+		return buffer; 
+	}
+	
+	/**
+	 * Sends the contents of the file, packet by packet, waiting for an acknowledgment to be returned before continuing to the next packet.
+	 * 
+	 * @param bytesReadIn an array of bytes containing the contents of the file to be sent
+	 * @author Joe Frederick Samuel, Ryan Ribeiro
+	 */
+	public void sendFile(byte[] bytesReadIn) {
+		//loop control variables
+		int i = 0, j = 0;
+		int blockID = 1;
 		
-		public void sendFile(byte[] bytesReadIn) {
-			//loop control variables
-			int i = 0, j = 0;
-			int blockID = 1;
-			
-			int numBlocks = (bytesReadIn.length / MAX_BLOCK_SIZE);
-			int numRemainder = bytesReadIn.length % MAX_BLOCK_SIZE;
-					
-			for (i = 0; i < numBlocks; i++) {
-				try {
-					DatagramPacket receiveAcknowledgement = server.waitReceiveMessage();
-					byte[] ACKData = receiveAcknowledgement.getData();
-					if (ACKData[2] != (byte) ((blockID - 1) & 0xFF) || ACKData[3] != (((blockID - 1) >> 8) & 0xFF)) {
-						System.err.println("ACK message failed.");
-						System.exit(1);
-					}
-				} catch (IOException e) {
-					System.err.println("IOException: I/O error occured while server waiting to recieve message");
-					e.printStackTrace();
+		int numBlocks = (bytesReadIn.length / MAX_BLOCK_SIZE);
+		int numRemainder = bytesReadIn.length % MAX_BLOCK_SIZE;
+				
+		for (i = 0; i < numBlocks; i++) {
+			try {
+				DatagramPacket receiveAcknowledgement = server.waitReceiveMessage();
+				byte[] ACKData = receiveAcknowledgement.getData();
+				if (ACKData[2] != (byte) ((blockID - 1) & 0xFF) || ACKData[3] != (((blockID - 1) >> 8) & 0xFF)) {
+					System.err.println("ACK message failed.");
 					System.exit(1);
-				}		
-				//This makes the stuff to send
-				ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
-				bytesToSend.write(0);
-				bytesToSend.write(OP_DATAPACKET);
-				bytesToSend.write((byte) (blockID & 0xFF));
-				bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
-				for (j = MAX_BLOCK_SIZE * i; j < bytesReadIn.length; j++) {
-					bytesToSend.write(bytesReadIn[j]);
 				}
-				byte[] data = bytesToSend.toByteArray();
-				try {
-					DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), server.getClientPort());
-					try {
-						sendMessage(sendPacket);
-					} catch (IOException e) {
-						System.err.println("IOException: I/O error occured while sending server was message.");
-						e.printStackTrace();
-						System.exit(1);
-					}
-				} catch (UnknownHostException e) {
-					System.err.println("UnknownHostException: could not determine IP address of host.");
-					e.printStackTrace();
-				}
-				blockID++;
-			}	
-			
-			//Final packet either empty (0) or remaining bytes
+			} catch (IOException e) {
+				System.err.println("IOException: I/O error occured while server waiting to recieve message");
+				e.printStackTrace();
+				System.exit(1);
+			}		
+			//This makes the stuff to send
 			ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
 			bytesToSend.write(0);
 			bytesToSend.write(OP_DATAPACKET);
 			bytesToSend.write((byte) (blockID & 0xFF));
 			bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
-			if (numRemainder == 0) {
-				bytesToSend.write((0));
-			} else {
-				for (i = MAX_BLOCK_SIZE * numBlocks; i < bytesReadIn.length; i++) {
-					bytesToSend.write(bytesReadIn[i]);
-				}
+			for (j = MAX_BLOCK_SIZE * i; j < bytesReadIn.length; j++) {
+				bytesToSend.write(bytesReadIn[j]);
 			}
 			byte[] data = bytesToSend.toByteArray();
 			try {
 				DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), server.getClientPort());
+				try {
+					sendMessage(sendPacket);
+				} catch (IOException e) {
+					System.err.println("IOException: I/O error occured while sending server was message.");
+					e.printStackTrace();
+					System.exit(1);
+				}
 			} catch (UnknownHostException e) {
 				System.err.println("UnknownHostException: could not determine IP address of host.");
 				e.printStackTrace();
 			}
-		}
-		//END of RRQ
+			blockID++;
+		}	
 		
-		//WRQ
-		private void getData(String fileName) {
-			//Receive file from TFTP server
-			 ByteArrayOutputStream receivedByte = receiveFile();
-			
-			 //Write File
-			 writeFile(fileName, receivedByte);
+		//Final packet either empty (0) or remaining bytes
+		ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
+		bytesToSend.write(0);
+		bytesToSend.write(OP_DATAPACKET);
+		bytesToSend.write((byte) (blockID & 0xFF));
+		bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
+		if (numRemainder == 0) {
+			bytesToSend.write((0));
+		} else {
+			for (i = MAX_BLOCK_SIZE * numBlocks; i < bytesReadIn.length; i++) {
+				bytesToSend.write(bytesReadIn[i]);
+			}
 		}
-		
-		private void writeFile(String fileName, ByteArrayOutputStream receivedByte) {
+		byte[] data = bytesToSend.toByteArray();
+		try {
+			DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), server.getClientPort());
 			try {
-				OutputStream outputStream = new FileOutputStream(fileName);
-				receivedByte.writeTo(outputStream);
+				sendPacket(sendPacket);
 			} catch (IOException e) {
-				System.out.println("Failed to write the file.");
+				System.err.println("IOException: I/O error occured while sending message to client.");
 				e.printStackTrace();
 				System.exit(1);
-			}		
+			}
+		} catch (UnknownHostException e) {
+			System.err.println("UnknownHostException: could not determine IP address of host.");
+			e.printStackTrace();
 		}
+	}
 
-		private ByteArrayOutputStream receiveFile(){
-			ByteArrayOutputStream byteBlock = new ByteArrayOutputStream();
-			int packetCount = 1;
-			
-			DatagramPacket receivePacket = null;
-			do {
-				System.out.println("Number of TFTP packets receieved: "  + packetCount);
-				packetCount++;
-				byte[] buffer = new byte[MAX_PACKET_SIZE];
-				try {
-					receivePacket = new DatagramPacket(buffer, buffer.length, InetAddress.getLocalHost(), server.getClientPort());
-					try {
-						server.getReceiveSocket().receive(receivePacket);
-					} catch (IOException e) {
-						System.out.println("Receive socket has failed to receive packet from server.");
-						e.printStackTrace();
-						System.exit(1);
-					}
-				} catch (UnknownHostException e1) {
-					System.err.println("UnknownHostException: could not determine IP address of host while creating server response.");
-					e1.printStackTrace();
-					System.exit(1);
-				}
-				
-				//Analyzing packet data for OP codes
-				byte[] opCode = {buffer[0], buffer[1]};
-				byte[] blockID = {buffer[2], buffer[3]};
-				try {
-					byteBlock.write(opCode);
-					acknowledge(blockID);
-				} catch (IOException e) {
-					System.err.println("Failed to write OP code");	
-					e.printStackTrace();
-					System.exit(1);
-				}
-			}while(!checkLastPacket(receivePacket));
-			return byteBlock;
-		}
-			
-		private void acknowledge(byte[] blockID) {
-			byte[] ack = {0, OP_ACK, blockID[0], blockID[1]};
-			DatagramPacket acknowledgePacket;
+	/**
+	 * Receives the contents of a file from the server.
+	 * 
+	 * @param fileName
+	 * @author Joe Frederick Samuel, Ryan Ribeiro
+	 */
+	private void getData(String fileName) {
+		//Receive file from TFTP server
+		 ByteArrayOutputStream receivedByte = receiveFile();
+		
+		 //Write File
+		 writeFile(fileName, receivedByte);
+	}
+	
+	/**
+	 * Writes data to file
+	 * 
+	 * @param filename filename to send with the read request
+	 * @param receivedByte byte array of data blocks received to write into file.
+	 * @author Joe Frederick
+	 */
+	private void writeFile(String fileName, ByteArrayOutputStream receivedByte) {
+		try {
+			OutputStream outputStream = new FileOutputStream(fileName);
+			receivedByte.writeTo(outputStream);
+		} catch (IOException e) {
+			System.out.println("Failed to write the file.");
+			e.printStackTrace();
+			System.exit(1);
+		}		
+	}
+
+	/**
+	 * Parses the received packet into data blocks 
+	 * 
+	 * @return ByteArrayOutputStream the byte stream of data blocks received
+	 * @author Joe Frederick Samuel
+	 */
+	private ByteArrayOutputStream receiveFile(){
+		ByteArrayOutputStream byteBlock = new ByteArrayOutputStream();
+		int packetCount = 1;
+		
+		DatagramPacket receivePacket = null;
+		do {
+			System.out.println("Number of TFTP packets receieved: "  + packetCount);
+			packetCount++;
+			byte[] buffer = new byte[MAX_PACKET_SIZE];
 			try {
-				acknowledgePacket = new DatagramPacket(ack, ack.length, InetAddress.getLocalHost(), server.getClientPort());
+				receivePacket = new DatagramPacket(buffer, buffer.length, InetAddress.getLocalHost(), server.getClientPort());
 				try {
-					sendSocket.send(acknowledgePacket);
+					server.getReceiveSocket().receive(receivePacket);
 				} catch (IOException e) {
-					System.out.println("Failed to send acknowledge Packet from Client");
+					System.out.println("Receive socket has failed to receive packet from server.");
 					e.printStackTrace();
 					System.exit(1);
 				}
@@ -275,17 +292,62 @@ public class ServerSpawnThread implements Runnable{
 				System.err.println("UnknownHostException: could not determine IP address of host while creating server response.");
 				e1.printStackTrace();
 				System.exit(1);
-			}	
-		}
-		
-		private boolean checkLastPacket(DatagramPacket receivedPacket) {
-			if(receivedPacket.getLength() < 512)
-				return true;
-			else
-				return false;
-		}
-		//END of WRQ
-
+			}
+			
+			//Analyzing packet data for OP codes
+			byte[] opCode = {buffer[0], buffer[1]};
+			byte[] blockID = {buffer[2], buffer[3]};
+			try {
+				byteBlock.write(opCode);
+				acknowledge(blockID);
+			} catch (IOException e) {
+				System.err.println("Failed to write OP code");	
+				e.printStackTrace();
+				System.exit(1);
+			}
+		}while(!checkLastPacket(receivePacket));
+		return byteBlock;
+	}
+	
+	/**
+	 * Acknowledges reception of server packet.
+	 * 
+	 * @param blockID byte array containing the block ID whose reception is acknowledged.
+	 * @author Joe Frederick Samuel
+	 */
+	private void acknowledge(byte[] blockID) {
+		byte[] ack = {0, OP_ACK, blockID[0], blockID[1]};
+		DatagramPacket acknowledgePacket;
+		try {
+			acknowledgePacket = new DatagramPacket(ack, ack.length, InetAddress.getLocalHost(), server.getClientPort());
+			try {
+				sendSocket.send(acknowledgePacket);
+			} catch (IOException e) {
+				System.out.println("Failed to send acknowledge Packet from Client");
+				e.printStackTrace();
+				System.exit(1);
+			}
+		} catch (UnknownHostException e1) {
+			System.err.println("UnknownHostException: could not determine IP address of host while creating server response.");
+			e1.printStackTrace();
+			System.exit(1);
+		}	
+	}
+	
+	/**
+	 * Checks if the packet received is the last packet for transmission
+	 * 
+	 * @param receivedPacket the packet received from the server
+	 * @return boolean	true if last packet, false otherwise.
+	 * @author Joe Frederick Samuel
+	 */
+	private boolean checkLastPacket(DatagramPacket receivedPacket) {
+		if(receivedPacket.getLength() < 512)
+			return true;
+		else
+			return false;
+	}
+	//End of Trivial File Transfer Protocol Methods
 
 	/**
 	 * ensures the received message is of proper format. format follows:

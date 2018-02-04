@@ -6,7 +6,6 @@ import java.net.DatagramPacket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -16,8 +15,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
 
-import server.InvalidMessageFormatException;
-
 /**
  * a class representing the client for the server-client-intermediate host system. has
  * Capability to send and receive messages to and from the intermediate host, 
@@ -26,8 +23,6 @@ import server.InvalidMessageFormatException;
  * @author Luke Newton
  */
 public class Client {
-	//number of times client algorithm repeats in main
-	private static final int NUMBER_OF_CLIENT_MAIN_ITERATIONS = 11;
 	//port number of intermediate host (ErrorSimulator)
 	private static final int INTERMEDIATE_HOST_PORT_NUMBER = 23;
 	//max size for data in a DatagramPacket
@@ -96,6 +91,7 @@ public class Client {
 	 * 
 	 * @param filename filename to send with the read request
 	 * @return none
+	 * @author Joe Frederick Samuel, Ryan Ribeiro
 	 */
 	private void getData(String fileName) {
 		//Preparing the send packet
@@ -125,6 +121,7 @@ public class Client {
 	 * @param filename filename to send with the read request
 	 * @param receivedByte byte array of data blocks received to write into file.
 	 * @return none
+	 * @author Joe Frederick Samuel
 	 */
 	private void writeFile(String fileName, ByteArrayOutputStream receivedByte) {
 		try {
@@ -142,6 +139,7 @@ public class Client {
 	 * Parses the received packet into data blocks 
 	 * 
 	 * @return ByteArrayOutputStream the byte stream of data blocks received
+	 * @author Joe Frederick Samuel
 	 */
 	private ByteArrayOutputStream receiveFile(){
 		ByteArrayOutputStream byteBlock = new ByteArrayOutputStream();
@@ -182,6 +180,7 @@ public class Client {
 	 * 
 	 * @param blockID byte array containing the block ID whose reception is acknowledged.
 	 * @return none
+	 * @author Joe Frederick Samuel
 	 */
 	private void acknowledge(byte[] blockID) {
 		byte[] ack = {0, OP_ACK, blockID[0], blockID[1]};
@@ -201,6 +200,7 @@ public class Client {
 	 * 
 	 * @param receivedPacket the packet received from the server
 	 * @return boolean	true if last packet, false otherwise.
+	 * @author Joe Frederick Samuel
 	 */
 	private boolean checkLastPacket(DatagramPacket receivedPacket) {
 		if(receivedPacket.getLength() < 512)
@@ -208,13 +208,12 @@ public class Client {
 		else
 			return false;
 	}
-	//END of RRQ
 	
 	/**
-	 * Sends packet
+	 * Sends the contents of a file to the server.
 	 * 
-	 * @param receivedPacket the packet received from the server
-	 * @return boolean	true if last packet, false otherwise.
+	 * @param filename the name of the file to be sent
+	 * @author Joe Frederick Samuel, Ryan Ribeiro
 	 */
 	private void sendData(String filename) {
 		//Preparing the send packet
@@ -250,10 +249,11 @@ public class Client {
 	}
 	
 	/**
-	 * Reads received file
+	 * Reads the contents of the file and stores it as an array of bytes.
 	 * 
-	 * @param fileName name of the file
-	 * @return byte[] byte array of the blocks of information.
+	 * @param filename the name of the file to be read
+	 * @return byte[] contains the contents of the file read in
+	 * @author Joe Frederick Samuel, Ryan Ribeiro
 	 */
 	public byte[] readFile(String filename) { 
 		File file = new File(filename);
@@ -280,10 +280,10 @@ public class Client {
 	}
 	
 	/**
-	 * Sends file from byte blocks
+	 * Sends the contents of the file, packet by packet, waiting for an acknowledgment to be returned before continuing to the next packet.
 	 * 
-	 * @param bytesReadIn name of the file
-	 * @return byte[] byte array of the blocks of information.
+	 * @param bytesReadIn an array of bytes containing the contents of the file to be sent
+	 * @author Joe Frederick Samuel, Ryan Ribeiro
 	 */
 	public void sendFile(byte[] bytesReadIn) {
 		//loop control variables
@@ -348,13 +348,19 @@ public class Client {
 		byte[] data = bytesToSend.toByteArray();
 		try {
 			DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), INTERMEDIATE_HOST_PORT_NUMBER);
+			try {
+				sendMessage(sendPacket);
+			} catch (IOException e) {
+				System.err.println("IOException: I/O error occured while sending message to server.");
+				e.printStackTrace();
+				System.exit(1);
+			}
 		} catch (UnknownHostException e) {
 			System.err.println("UnknownHostException: could not determine IP address of host.");
 			e.printStackTrace();
 		}
 	}
-	//END of WRQ
-	//End of TFTP methods
+	//End of Trivial File Transfer Protocol Methods
 	
 	/**
 	 * closes the socket for the client
@@ -450,69 +456,9 @@ public class Client {
 			System.exit(1);
 		}
 
-		//repeat for specified number of iterations
-		for(int i = 0; i < NUMBER_OF_CLIENT_MAIN_ITERATIONS; i++){
-			/*create content for DatagramPacket to send to intermediate host*/
-			byte[] requestData;
-			
-			/*alternate between read and write requests, with final being invalid format*/
-			if(i == NUMBER_OF_CLIENT_MAIN_ITERATIONS - 1) {
-				//final invalid format message
-				String message = "this message is invalid format";
-				requestData = message.getBytes();
-				
-			} else if(i % 2 == 0) {
-				//read request
-				requestData = createPacketData(FILENAME, MODE, OP_RRQ);
-				
-			} else {
-				//write request
-				requestData = createPacketData(FILENAME, MODE, OP_WRQ);
-			}
-
-			//create packet to send to intermediate host on specified port
-			DatagramPacket sendPacket = null;
-			try {
-				sendPacket = new DatagramPacket(requestData, requestData.length,
-						InetAddress.getLocalHost(), INTERMEDIATE_HOST_PORT_NUMBER);
-			} catch (UnknownHostException e) {
-				//failed to determine the host IP address
-				System.err.println("UnknownHostException: could not determine IP address of host while creating packet to send to intermediate host.");
-				e.printStackTrace();
-				System.exit(1);
-			}
-
-			//print information to send in packet to intermediate host
-			System.out.print("Client sending message: \nTo ");
-			client.printPacketInfo(sendPacket);
-
-			//send datagram to intermediate host
-			try {
-				client.sendMessage(sendPacket);
-			} catch (IOException e) {
-				System.err.println("IOException: I/O error occured while sending message to intermediate host");
-				e.printStackTrace();
-				System.exit(1);
-			}
-
-			System.out.println("Client sent packet to intermediate host");
-
-			//wait to receive response from intermediate host
-			DatagramPacket response = null;
-			try {
-				System.out.println("Client waiting for response...");
-				response = client.waitRecieveMessage();
-			} catch (IOException e) {
-				System.err.println("IOException: I/O error occured while client waiting for response");
-				e.printStackTrace();
-				System.exit(1);
-			}
-
-			//print information received from intermediate host
-			System.out.print("Client received message: \nFrom ");
-			client.printPacketInfo(response);
-			
-		}
+		client.getData(FILENAME);		
+		client.sendData(FILENAME);
+		
 		client.closeClientSocket();
 	}
 }
