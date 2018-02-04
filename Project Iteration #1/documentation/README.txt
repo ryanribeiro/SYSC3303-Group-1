@@ -3,9 +3,7 @@ FILES IN THIS PROJECT
 ----------------------
 Client.java: 
 	represents the client in the system.
-RequestType.java: 
-	Enum used by client to specify the format of message requests when creating DatagramPacket contents.
-IntermediateHost.java: 
+ErrorSimulator.java: 
 	represents the intermediate host in the system.
 Server.java:
 	represents the server in the system.
@@ -15,7 +13,7 @@ InvalidMessageFormatException.java:
 ----------------------
 TO RUN THE ASSIGNMENT
 ----------------------
-The assignment is run by executing three programs: Client.java, IntermediateHost.java, and Server.java.
+The assignment is run by executing three programs: Client.java, ErrorSimulator.java, and Server.java.
 
 Open the project in Eclipse and run each in the following order:
 1. Server.java (in server package)
