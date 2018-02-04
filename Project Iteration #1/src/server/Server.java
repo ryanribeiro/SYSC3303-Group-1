@@ -5,12 +5,13 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketException;
 
+
 /**
  * a class representing the server for the server-client-intermediate host system. has
  * Capability to receive requests, and create threads to process and send appropriate 
  * responses
  * 
- * @author Luke Newton Kevin Sun
+ * @author Luke Newton, Kevin Sun, Joe Frederick Samuel, Ryan Ribeiro
  *
  */
 public class Server {
@@ -21,14 +22,16 @@ public class Server {
 	//Milliseconds until server times out while waiting for response
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//max size for data in a DatagramPacket
-	private static final int MAX_PACKET_SIZE = 100;
+
+	private static final int MAX_PACKET_SIZE = 516;
+
 	//change this to turn on/off pauses for the server request processing
 	private static final boolean PAUSES_ON = true;
 	/*number of milliseconds server pauses for each time
 	*(note that setting this too high with timeouts on may
 	*timeout client before message is processed)*/
 	private static final int PAUSE_MILLISECONDS = 1000;
-	
+
 	//socket to receive messages
 	private DatagramSocket receiveSocket;
 	//port number of client to send response to
@@ -69,7 +72,15 @@ public class Server {
 		this();
 		receiveSocket = new DatagramSocket(port);
 	}
-
+	
+	/**
+	 * Sends the receive socket to the thread to be reused.
+	 * TODO: Potentially create the receive socket in the thread class instead.
+	 * @return receiveSocket
+	 */
+	public DatagramSocket getReceiveSocket() {
+		return receiveSocket;
+	}
 	/**
 	 * informs the caller of whether or not the server is shutting down
 	 * 
