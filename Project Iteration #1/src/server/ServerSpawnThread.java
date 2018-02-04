@@ -176,7 +176,7 @@ public class ServerSpawnThread implements Runnable{
 				//Checks the acknowledgement is for the correct block
 				//Bitwise operations are to get the last 2 bytes of the 4 byte long integer
 				if (ACKData[2] != (byte) ((blockID - 1) & 0xFF) || ACKData[3] != (((blockID - 1) >> 8) & 0xFF)) {
-					System.err.println("ACK message failed.");
+					System.err.println("Acknowledge message failed.");
 					System.exit(1);
 				}
 			} catch (IOException e) {

@@ -96,7 +96,7 @@ public class Client {
 	private void getData(String fileName) {
 		//Preparing the send packet
 		request = createPacketData(fileName, MODE, OP_RRQ);
-		sendPacket = new DatagramPacket(request, request.length, inetAddress, TFTP_DEFAULT_PORT);
+		sendPacket = new DatagramPacket(request, request.length, inetAddress, INTERMEDIATE_HOST_PORT_NUMBER);
 		
 		//Sending packet request
 		try {
@@ -218,7 +218,7 @@ public class Client {
 	private void sendData(String filename) {
 		//Preparing the send packet
 		request = createPacketData(filename, MODE, OP_WRQ);
-		sendPacket = new DatagramPacket(request, request.length, inetAddress, TFTP_DEFAULT_PORT);
+		sendPacket = new DatagramPacket(request, request.length, inetAddress, INTERMEDIATE_HOST_PORT_NUMBER);
 		DatagramPacket receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
 		
 		//Sending packet request
