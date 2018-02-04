@@ -40,7 +40,7 @@ public class Server {
 	private DatagramPacket receivePacket;
 	//thread created to handle a client request
 	private static Thread serverLogicThread;
-	//boolean indicating whther server should be shutting down
+	//boolean indicating whether server should be shutting down
 	private volatile boolean quitPreperation;
 	//integer representing the number of messages currently being processed
 	private volatile int numberOfMessagesBeingProcessed;
@@ -196,7 +196,7 @@ public class Server {
 		
 		System.out.println("Enter 'quit' to begin server shutdown procedures");
 
-		/*Recieve packet and create a thread to handle the request.
+		/*Receive packet and create a thread to handle the request.
 		 * Do this while the server is not trying to shut down*/
 		while(!server.isQuitTime()) {
 			DatagramPacket request = null;
