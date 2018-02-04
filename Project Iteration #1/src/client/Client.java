@@ -197,7 +197,7 @@ public class Client {
 	
 	
 	/**
-	 * Checks if the packet recieved is the last packet for transmission
+	 * Checks if the packet received is the last packet for transmission
 	 * 
 	 * @param receivedPacket the packet received from the server
 	 * @return boolean	true if last packet, false otherwise.
@@ -210,7 +210,12 @@ public class Client {
 	}
 	//END of RRQ
 	
-	//WRQ
+	/**
+	 * Sends packet
+	 * 
+	 * @param receivedPacket the packet received from the server
+	 * @return boolean	true if last packet, false otherwise.
+	 */
 	private void sendData(String filename) {
 		//Preparing the send packet
 		request = createPacketData(filename, MODE, OP_WRQ);
@@ -244,6 +249,12 @@ public class Client {
 		sendFile(bytesReadIn);		
 	}
 	
+	/**
+	 * Reads received file
+	 * 
+	 * @param fileName name of the file
+	 * @return byte[] byte array of the blocks of information.
+	 */
 	public byte[] readFile(String filename) { 
 		File file = new File(filename);
 		byte[] buffer = new byte[(int) file.length()];		
@@ -267,6 +278,13 @@ public class Client {
 		}		
 		return buffer; 
 	}
+	
+	/**
+	 * Sends file from byte blocks
+	 * 
+	 * @param bytesReadIn name of the file
+	 * @return byte[] byte array of the blocks of information.
+	 */
 	public void sendFile(byte[] bytesReadIn) {
 		//loop control variables
 		int i = 0, j = 0;
