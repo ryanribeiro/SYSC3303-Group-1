@@ -88,6 +88,32 @@ TIMEOUT_MILLISECONDS:
 	This integer value sets the timeout length in milliseconds.
 MAX_PACKET_SIZE:
 	This integer value specifies the maximum size of the data portion of a DatagramPacket.
+
+--------------------------
+Responsibilities breakdown
+--------------------------
+Cameron:
+- Reviewing/merging 
+- Refactoring original server/client code from assignment 0 to iteration 1
+
+Kevin:
+- Segments of code from assignment 0 used in iteration 1
+- Implemented multi-threading in server
+
+Luke:
+- Majority of code from assignment 0 used in iteration 1
+- Implemented server shut down
+- Worked on unit testing
+- UCM diagram
+
+Ryan:
+- Implemented steady-state file transfer/TFTP protocols between client and server
+
+Joe:
+- Building TFTP stack on top of UDP network protocol
+- OP Code base and TFTP packet parsing
+- Implemented steady-state file transfer/TFTP protocols between client and server
+- UML diagrams
 	
 ---------------
 DESIGN CHOICES
