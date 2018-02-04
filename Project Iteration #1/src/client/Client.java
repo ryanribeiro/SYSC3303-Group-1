@@ -46,7 +46,7 @@ public class Client {
 	private static final byte OP_ERROR = 5;
 	
 	//TFTP Address
-	private static final String TFTP_SERVER_IP = "192.168.1.11";
+	private static final String TFTP_SERVER_IP = "127.0.0.1";
 	private static final int TFTP_DEFAULT_PORT = 69;
 	private InetAddress inetAddress = null;
 	
