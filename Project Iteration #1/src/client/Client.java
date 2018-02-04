@@ -257,6 +257,7 @@ public class Client {
 	 */
 	public byte[] readFile(String filename) { 
 		File file = new File(filename);
+		//Contents of the file read in as bytes 
 		byte[] buffer = new byte[(int) file.length()];		
 		try {
 			InputStream input = new FileInputStream(file);
@@ -288,15 +289,22 @@ public class Client {
 	public void sendFile(byte[] bytesReadIn) {
 		//loop control variables
 		int i = 0, j = 0;
+		//First block starts with an ID of 1
 		int blockID = 1;
 		
+		//Number of blocks that will be needed to transfer file, less the one additional one block for any remaining bytes
 		int numBlocks = (bytesReadIn.length / MAX_BLOCK_SIZE);
+		//User to determine if there are any additional bytes that need to be written in the final block
 		int numRemainder = bytesReadIn.length % MAX_BLOCK_SIZE;
 				
+		//Looping through the number of blocks that will be sent
 		for (i = 0; i < numBlocks; i++) {
 			try {
+				//Requires acknowledgement before sending the next DATA packet
 				DatagramPacket receiveAcknowledgement = waitRecieveMessage();
 				byte[] ACKData = receiveAcknowledgement.getData();
+				//Checks the acknowledgement is for the correct block
+				//Bitwise operations are to get the last 2 bytes of the 4 byte long integer
 				if (ACKData[2] != (byte) ((blockID - 1) & 0xFF) || ACKData[3] != (((blockID - 1) >> 8) & 0xFF)) {
 					System.err.println("ACK message failed.");
 					System.exit(1);
@@ -306,16 +314,19 @@ public class Client {
 				e.printStackTrace();
 				System.exit(1);
 			}			
-			//This makes the stuff to send
+			//ByteArrayOutputStream used to create a stream of bytes that will be sent in 516 byte DATA packets
 			ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
 			bytesToSend.write(0);
 			bytesToSend.write(OP_DATAPACKET);
+			//Bitwise operations are to get the last 2 bytes of the 4 byte long integer
 			bytesToSend.write((byte) (blockID & 0xFF));
 			bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
+			//Looping through all bytes, one block at a time
 			for (j = MAX_BLOCK_SIZE * i; j < bytesReadIn.length; j++) {
 				bytesToSend.write(bytesReadIn[j]);
 			}
 			byte[] data = bytesToSend.toByteArray();
+			//Creating the DATA packet to be sent, then sending it
 			try {
 				DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), INTERMEDIATE_HOST_PORT_NUMBER);
 				try {
@@ -338,6 +349,7 @@ public class Client {
 		bytesToSend.write(OP_DATAPACKET);
 		bytesToSend.write((byte) (blockID & 0xFF));
 		bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
+		//If there was exactly a multiple of 512 bytes, the final DATA packet will contain a 0 byte data section
 		if (numRemainder == 0) {
 			bytesToSend.write((0));
 		} else {
