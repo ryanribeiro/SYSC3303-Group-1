@@ -4,8 +4,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -187,7 +189,89 @@ public class Server {
 	//END of RRQ
 	
 	//WRQ
+	private void getData(String fileName) {
+		//Receive file from TFTP server
+		 ByteArrayOutputStream receivedByte = receiveFile();
+		
+		 //Write File
+		 writeFile(fileName, receivedByte);
+	}
 	
+	private void writeFile(String fileName, ByteArrayOutputStream receivedByte) {
+		try {
+			OutputStream outputStream = new FileOutputStream(fileName);
+			receivedByte.writeTo(outputStream);
+		} catch (IOException e) {
+			System.out.println("Failed to write the file.");
+			e.printStackTrace();
+			System.exit(1);
+		}		
+	}
+
+	private ByteArrayOutputStream receiveFile(){
+		ByteArrayOutputStream byteBlock = new ByteArrayOutputStream();
+		int packetCount = 1;
+		
+		DatagramPacket receivePacket = null;
+		do {
+			System.out.println("Number of TFTP packets receieved: "  + packetCount);
+			packetCount++;
+			byte[] buffer = new byte[MAX_PACKET_SIZE];
+			try {
+				receivePacket = new DatagramPacket(buffer, buffer.length, InetAddress.getLocalHost(), getClientPort());
+				try {
+					recieveSocket.receive(receivePacket);
+				} catch (IOException e) {
+					System.out.println("Receive socket has failed to receive packet from server.");
+					e.printStackTrace();
+					System.exit(1);
+				}
+			} catch (UnknownHostException e1) {
+				System.err.println("UnknownHostException: could not determine IP address of host while creating server response.");
+				e1.printStackTrace();
+				System.exit(1);
+			}
+			
+			//Analyzing packet data for OP codes
+			byte[] opCode = {buffer[0], buffer[1]};
+			byte[] blockID = {buffer[2], buffer[3]};
+			try {
+				byteBlock.write(opCode);
+				acknowledge(blockID);
+			} catch (IOException e) {
+				System.err.println("Failed to write OP code");	
+				e.printStackTrace();
+				System.exit(1);
+			}
+		}while(!checkLastPacket(receivePacket));
+		return byteBlock;
+	}
+		
+	private void acknowledge(byte[] blockID) {
+		byte[] ack = {0, OP_ACK, blockID[0], blockID[1]};
+		DatagramPacket acknowledgePacket;
+		try {
+			acknowledgePacket = new DatagramPacket(ack, ack.length, InetAddress.getLocalHost(), getClientPort());
+			try {
+				sendSocket.send(acknowledgePacket);
+			} catch (IOException e) {
+				System.out.println("Failed to send acknowledge Packet from Client");
+				e.printStackTrace();
+				System.exit(1);
+			}
+		} catch (UnknownHostException e1) {
+			System.err.println("UnknownHostException: could not determine IP address of host while creating server response.");
+			e1.printStackTrace();
+			System.exit(1);
+		}	
+	}
+	
+	private boolean checkLastPacket(DatagramPacket receivedPacket) {
+		if(receivedPacket.getLength() < 512)
+			return true;
+		else
+			return false;
+	}
 	//END of WRQ
 
 	/**
