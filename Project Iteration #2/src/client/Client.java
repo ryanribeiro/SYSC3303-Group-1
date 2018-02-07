@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
+import java.util.Scanner;
 
 /**
  * a class representing the client for the server-client-intermediate host system. has
@@ -32,7 +33,7 @@ public class Client {
 	//mode to send to server
 	private static final String MODE = "octet";
 	//change this to turn on/off timeouts for the client
-	private static final boolean TIMEOUTS_ON = true;
+	private static final boolean TIMEOUTS_ON = false;
 	//Milliseconds until client times out while waiting for response
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//max block size as an int
@@ -452,8 +453,9 @@ public class Client {
 	}
 
 	/**
-	 * main program for client program containing specified client algorithm
+	 * main program for client program
 	 *  
+	 * @author Luke Newton
 	 * @param args
 	 */
 	public static void main(String[] args) {
@@ -467,10 +469,52 @@ public class Client {
 			e.printStackTrace();
 			System.exit(1);
 		}
-
-		client.getData(FILENAME);		
-		client.sendData(FILENAME);
 		
+		client.printHelpMenu();
+		
+		Scanner scanner = new Scanner(System.in);
+		String command = "";
+		String filename = "";
+		String[] input;
+		boolean filenameGiven;
+		while(!command.equalsIgnoreCase("quit")){
+			System.out.print("Command: ");
+			
+			input = scanner.nextLine().split(" ");
+			command = input[0];
+			try{
+				filename = input[1];
+				filenameGiven = true;
+			} catch (ArrayIndexOutOfBoundsException e){
+				//no filename specified
+				filenameGiven = false;;
+			}
+			
+			if(command.equalsIgnoreCase("read") && filenameGiven)
+				client.getData(filename);
+			else if(command.equalsIgnoreCase("write") && filenameGiven)
+				client.sendData(filename);
+			else if(command.equalsIgnoreCase("help"))
+				client.printHelpMenu();
+			else if(input.length > 2)
+				System.out.println("Invalid command! Too many arguements.");
+			else
+				System.out.println("Invalid command! Type 'help' to check available commands and remember to provide a file name if required");
+		}
+		System.out.println("Client shutting down...");
 		client.closeClientSocket();
 	}
+
+	/**
+	 * prints a menu containing all valid client commands
+	 * 
+	 * @author Luke Newton
+	 */
+	private void printHelpMenu() {
+		System.out.println("type 'read' followed by a file name to begin a read request.");
+		System.out.println("type 'write' followed by a file name to begin a read request.");
+		System.out.println("type 'quit' to shutdown the client.");
+		System.out.println("type 'help' to display this message again.\n");
+	}
+	
 }
