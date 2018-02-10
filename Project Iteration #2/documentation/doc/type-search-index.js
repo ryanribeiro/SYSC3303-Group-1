@@ -1,1 +1,1 @@
-typeSearchIndex = [{"p":"client","l":"Client"},{"p":"intermediateHost","l":"IntermediateHost"},{"p":"server","l":"InvalidMessageFormatException"},{"p":"client","l":"RequestType"},{"p":"server","l":"Server"}]
+typeSearchIndex = [{"p":"client","l":"Client"},{"p":"errorSimulator","l":"ClientServerConnection"},{"p":"errorSimulator","l":"ErrorSimulator"},{"p":"server","l":"InvalidMessageFormatException"},{"p":"server","l":"Server"},{"p":"server","l":"ServerQuitRunnable"},{"p":"server","l":"ServerSpawnThread"}]

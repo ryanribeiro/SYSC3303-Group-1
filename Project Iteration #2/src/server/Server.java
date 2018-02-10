@@ -18,7 +18,7 @@ public class Server {
 	//the port the server is located on
 	private static final int SERVER_PORT_NUMBER = 69;
 	//change this to turn on/off timeouts for the server
-	private static final boolean TIMEOUTS_ON = true;
+	private static final boolean TIMEOUTS_ON = false;
 	//Milliseconds until server times out while waiting for response
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//max size for data in a DatagramPacket
@@ -75,7 +75,7 @@ public class Server {
 	
 	/**
 	 * Sends the receive socket to the thread to be reused.
-	 * TODO: Potentially create the receive socket in the thread class instead.
+	 * 
 	 * @return receiveSocket
 	 */
 	public DatagramSocket getReceiveSocket() {
@@ -92,17 +92,18 @@ public class Server {
 
 	/**
 	 * inform the server to begin shutting down
+	 * 
+	 * @author Luke Newton
 	 */
-	public void setQuitTime() {
-		synchronized(this){
+	public synchronized void setQuitTime() {
 			this.quitPreperation = true;
-			receiveSocket.close();
-		}
+			receiveSocket.close();	
 	}
 
 	/**
 	 * create a new thread to deal with a specified message
 	 * 
+	 * @author Luke Newton
 	 * @param request the message received to process
 	 */
 	public void newMessageToProcess(DatagramPacket request){
@@ -116,6 +117,8 @@ public class Server {
 
 	/**
 	 * decrememnt the number of messages being processed when done
+	 * 
+	 * @author Luke Newton
 	 */
 	public void messageProcessed(){
 		numberOfMessagesBeingProcessed--;
@@ -124,6 +127,7 @@ public class Server {
 	/**
 	 *  returns the number of messages currently being processed
 	 *  
+	 *  @author Luke Newton
 	 * @return the number of messages currently being processed
 	 */
 	private int getNumberOfMessagesBeingProcessed() {
@@ -159,6 +163,9 @@ public class Server {
 		return receivePacket;
 	}
 	
+	/**
+	 * pauses execution breiefly so output can be read as it is created
+	 */
 	public void pause(){
 		if(PAUSES_ON){
 			try {

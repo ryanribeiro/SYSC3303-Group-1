@@ -1,1 +1,1 @@
-packageSearchIndex = [{"l":"client"},{"l":"intermediateHost"},{"l":"server"}]
+packageSearchIndex = [{"l":"client"},{"l":"errorSimulator"},{"l":"server"}]

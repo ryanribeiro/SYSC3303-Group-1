@@ -1,19 +1,26 @@
 package server;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
+/**
+ * handles the processing of a single client request
+ * 
+ * @author Kevin Sun, Luke Newton, Joe Frederick Samuel, Ryan Ribeiro
+ */
 public class ServerSpawnThread implements Runnable{	
 	//the message to process and respond to
 	private DatagramPacket receivePacket;
@@ -27,20 +34,23 @@ public class ServerSpawnThread implements Runnable{
 	private String mode;
 	//reference to the server object to use as a lock
 	private Server server;
-	
+
 	//port number of client to send response to
 	private int clientPort;
-	
+
+	private static final String TFTP_SERVER_IP = "127.0.0.1";
 	private static final int MAX_PACKET_SIZE = 516;
 	//max block size as an int
 	private static final int MAX_BLOCK_SIZE = 512;
 	//TFTP OP code
 	private static final byte OP_RRQ = 1;
 	private static final byte OP_WRQ = 2;
-	private static final byte OP_DATAPACKET = 3;
+	private static final byte OP_DATA = 3;
 	private static final byte OP_ACK = 4;
 	private static final byte OP_ERROR = 5;
 
+
+	private InetAddress serverInetAddress = null;
 	/**
 	 * Constructor
 	 * 
@@ -54,6 +64,15 @@ public class ServerSpawnThread implements Runnable{
 		readRequest = false;
 		writeRequest = false;
 		this.server = server;
+
+		//TFTP
+		try {
+			serverInetAddress = InetAddress.getByName(TFTP_SERVER_IP);
+		} catch (UnknownHostException e) {
+			System.out.println("Failed to initalize TFTP Server IP");
+			e.printStackTrace();
+			System.exit(1);
+		}
 	}
 
 	/**
@@ -61,22 +80,23 @@ public class ServerSpawnThread implements Runnable{
 	 * handles parsing and responding to message.
 	 */
 	public void run(){
+		System.out.println("server message processing thread start.");
 		/*synchronize on a common object so we only process one message at a time.
 		 * primarily so the console prints ll info for a single message at once*/
 		synchronized(server){
 			//print data received from client
-			System.out.print("Server: message from \n");
+			System.out.println("\nServer: message from");
 			printPacketInfo(receivePacket);
-			
+
 			server.pause();
-			
+
 			/*check if message is proper format*/
 			try {
 				parseMessage();
-				if (readRequest == true) {
-					sendData(fileName);
-				} else if (writeRequest == true){
-					getData(fileName);
+				if (readRequest) {
+					readRequest(fileName);
+				} else if (writeRequest){
+					writeRequest(fileName);
 				} else {
 					System.err.println("Error: Request is neither a write or a read.");
 					System.exit(1);
@@ -86,70 +106,304 @@ public class ServerSpawnThread implements Runnable{
 				e.printStackTrace();
 				System.out.println("Invalid message Contents:");
 				printPacketInfo(receivePacket);
-				System.exit(1);
 			}         
-			
-			server.pause();
-			/*send response*/
-			try {
-				sendPacket(receivePacket); 
-			} catch (IOException e) {
-				//failed to determine the host IP address
-				System.err.println("IOException: I/O exception occured while sending message");
-				e.printStackTrace();
-				System.exit(1);
-			}  
-			server.pause();
-			
 			server.messageProcessed();
 		}
+		System.out.println("server message processing thread finished.");
 	}
-	
-	//Trivial File Transfer Protocol Methods
+
+	/**
+	 * 
+	 * 
+	 * @param fileName the name of the file to read from the server
+	 */
+	private void readRequest(String fileName){
+		//read in the specified file
+		byte[] fileData = readFile(fileName);
+		String fileText = new String(fileData);
+		System.out.println("File to send:\n" + fileText);
+
+		//transfer file to client
+		sendData(fileText);
+	}
+
 	/**
 	 * Sends the contents of a file to the server.
 	 * 
-	 * @param filename the name of the file to be sent
-	 * @author Joe Frederick Samuel, Ryan Ribeiro
+	 * @param fileText the file data to send
+	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 */
-	public void sendData(String filename) {		
-		byte[] bytesReadIn = readFile(filename);
+	public void sendData(String fileText){
+		//split file text into chunks for transfer
+		byte[][] fileData = splitByteArray(fileText.getBytes());
+
+		//create socket to transfer file
+		DatagramSocket sendReceiveSocket = null;
+		try {
+			sendReceiveSocket = new DatagramSocket();
+		} catch (SocketException e) {
+			System.out.println("Server error while creating socket to transfer data");
+			e.printStackTrace();
+			System.exit(1);
+		}
+
+		/*transfer file to client*/
+		DatagramPacket response = null;
+		int blockNumberInt = 0;
+		int blockNumber = 0;
+		byte[] serverResponseData, ACKData;
+		DatagramPacket ACKDatagram;
+		do{
+			//update block number
+			blockNumber++;
+			byte[] blockNumberArray = intToByteArray(blockNumber);
+
+			/*create response data*/
+			ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+			outputStream.write(0);
+			outputStream.write(OP_DATA);
+			outputStream.write(blockNumberArray[2]);
+			outputStream.write(blockNumberArray[3]);
+			for(int i = 0; i < fileData[blockNumberInt].length; i++){
+				outputStream.write(fileData[blockNumberInt][i]);
+			}
+			blockNumberInt++;	
+			serverResponseData = outputStream.toByteArray();
+
+			//create data datagram
+			response = new DatagramPacket(serverResponseData, serverResponseData.length, 
+					receivePacket.getAddress(), clientPort);
+
+			//print information in message to send
+			System.out.println("Server: sending packet");
+			printPacketInfo(response);
+
+			//send datagram
+			try {
+				sendReceiveSocket.send(response);
+			} catch (IOException e) {
+				System.out.println("Server error while sending data packet to client");
+				e.printStackTrace();
+				System.exit(1);
+			}
+
+			//exit when the final packet is sent from the server
+			if(response.getLength() < MAX_PACKET_SIZE)
+				break;
+
+			//get ACK packet
+			try {
+				System.out.println("Server: waiting for acknowledge");
+				sendReceiveSocket.receive(receivePacket);
+			} catch (IOException e) {
+				System.out.println("Server error while waiting for acknowledge");
+				e.printStackTrace();
+				System.exit(1);
+			}
+			//extract ACK data
+			ACKDatagram = receivePacket;
+			ACKData = ACKDatagram.getData();
+			int recievedBlockNumber = extractBlockNumber(ACKData);
+
+			//print information in message received
+			System.out.println("Server: recieved packet");
+			printPacketInfo(ACKDatagram);
+
+			//ensure we got an ACK repsponse
+			if(ACKDatagram.getData()[1] != OP_ACK){
+				System.out.println("Error: expected ACK, received unknown message.");
+				return;
+			}
+			//ensure we got an ACK matching the block number sent
+			if(recievedBlockNumber != blockNumber){
+				System.out.println("Error: ACK block number does not match sent block number.");
+				return;
+			}
+		}while(true);
+		sendReceiveSocket.close();
+	}
+
+	/**
+	 * extract a block number from an ACK packet
+	 * 
+	 * @author Luke Newton
+	 * @param ACKData the data the ACK packet contains
+	 * @return the block number of the ACK packet
+	 */
+	private int extractBlockNumber(byte[] ACKData) {
+		return ByteBuffer.wrap(new byte[]{0, 0, ACKData[2], ACKData[3]}).getInt();
+	}
+
+	/**
+	 * converts and integer into a byte array
+	 * 
+	 * @author Luke Newton
+	 * @param blockNumber the integer to convert to a byte array
+	 * @return the passed integer as a byte array
+	 */
+	private byte[] intToByteArray(int blockNumber) {
+		return ByteBuffer.allocate(Integer.BYTES).putInt(blockNumber).array();
+	}
+
+	/**
+	 * segments data into proper sized chunks to send in packets
+	 * 
+	 * @param data the data to segement 
+	 * @return an array containing byte arrays of a max length 512
+	 */
+	private byte[][] splitByteArray(byte[] data){
+		//the length of the data to segment
+		int dataLength = data.length;
+		//array to hold the segmented data
+		byte[][] result = new byte[(dataLength + MAX_BLOCK_SIZE - 1)/MAX_BLOCK_SIZE + 1][];
+		int resultIndex = 0;
+		int stopIndex = 0;
+
+		for (int i = 0; i + MAX_BLOCK_SIZE <= dataLength; i += MAX_BLOCK_SIZE){
+			stopIndex += MAX_BLOCK_SIZE;
+			result[resultIndex] = Arrays.copyOfRange(data, i, stopIndex);
+			resultIndex++;
+		}
+
+		//add the last segment
+		if (stopIndex < dataLength)
+			result[resultIndex] = Arrays.copyOfRange(data, stopIndex, dataLength);
+
+		resultIndex++;
+		//ensure that we always have a not full segment to send at the end (to stop data transfer)
+		result[resultIndex] = new byte[]{0};
+
+		return result;
+	}
+
+
+	/**
+	 * recieve file from client and write to memory
+	 * 
+	 * @param fileName
+	 */
+	private void writeRequest(String filename) {
+		byte[] fileData = receiveFile();
 		
-		sendFile(bytesReadIn);
+		System.out.println("\nFile to write:");
+		System.out.println(new String(fileData) + "\n");
+		
+		writeFile(fileData, filename);
+	}
+
+	//Trivial File Transfer Protocol Methods
+
+	/**
+	 * Writes data to file
+	 * 
+	 * @param filename name of the new file to write to
+	 * @param file contents byte array of data blocks received to write into file.
+	 * @author Joe Frederick Samuel, Luke Newton
+	 */
+	private void writeFile(byte[] fileContents, String fileName) {
+		try {
+			FileOutputStream fileWriter = new FileOutputStream(fileName);
+			fileWriter.write(fileContents);
+			fileWriter.close();
+		} catch (IOException e) {
+			System.out.println("Failed to write the file.");
+			e.printStackTrace();
+			System.exit(1);
+		}		
 	}
 	
+	/**
+	 * retrieve a file from the server in multple chunks and put blocks together
+	 * 
+	 * currently assumes that chunks of message appear in correct order!
+	 * 
+	 * @author Joe Frederick Samuel, Luke Newton
+	 * @return the file retrieved from the server as a byte array
+	 */
+	public byte[] receiveFile(){
+		//store the packets received from the server
+		DatagramPacket response = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
+		//the size of the message received from the server
+		int messageSize;
+		//current block number of DATA
+		int blockNumber = 0;
+		//the data contained in the response datagram
+		byte[] serverResponseData;
+		//buffer to store what has been received so far
+		List<Byte> responseBuffer = new ArrayList<>();
+		
+		DatagramSocket sendReceiveSocket = null;
+		try {
+			sendReceiveSocket = new DatagramSocket();
+		} catch (SocketException e) {
+			System.out.println("failed to create server sokcet");
+			e.printStackTrace();
+			System.exit(1);
+		}
+		do{
+			//send acknowledgement to server
+			acknowledge(intToByteArray(blockNumber), sendReceiveSocket);
+			
+			if(response != null && response.getLength() < MAX_PACKET_SIZE)
+				break;
+			
+			//recieve server message
+			try {
+				sendReceiveSocket.receive(response);
+			} catch (IOException e) {
+				System.out.println("I/O EXception while receiving message");
+				e.printStackTrace();
+				System.exit(1);
+			}
+
+			//print information in message received
+			System.out.println("server: received packet");
+			printPacketInfo(response);
+
+			//get size of the message
+			messageSize = response.getLength();
+			//get response datagram data
+			serverResponseData = response.getData();
+
+			//if we did not get a DATA packet, exit
+			if(serverResponseData[1] != OP_DATA){
+				System.out.println("Error during file read: unexpected packet format.");
+				return null;
+			}
+
+			//get block number
+			blockNumber = extractBlockNumber(serverResponseData);
+
+			//add response data to buffer (index 4 is the start of data in TFTP DATA packets)
+			for(int i = 4; i < messageSize; i++)
+				responseBuffer.add(serverResponseData[i]);
+		}while(true);
+
+		/*get final byte array from response buffer*/
+		ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
+		for(Byte b: responseBuffer)
+			byteOutputStream.write(b);
+
+		return byteOutputStream.toByteArray();
+	}
+
 	/**
 	 * Reads the contents of the file and stores it as an array of bytes.
 	 * 
 	 * @param filename the name of the file to be read
-	 * @return byte[] contains the contents of the file read in
-	 * @author Joe Frederick Samuel, Ryan Ribeiro
+	 * @return contents of the file read in
+	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 */
 	public byte[] readFile(String filename) {
-		File file = new File(filename);
-		//Contents of the file read in as bytes 
-		byte[] buffer = new byte[(int) file.length()];		
+		Path path = Paths.get(filename);
 		try {
-			InputStream input = new FileInputStream(file);
-			try {
-				input.read(buffer);
-			} catch (IOException e) {
-				System.out.println("Failed to read the file.");
-				e.printStackTrace();
-			}
-			try {
-				input.close();
-			} catch (IOException e) {
-				System.out.println("Failed to close file InputStream.");
-				e.printStackTrace();
-			}
-		} catch (FileNotFoundException e) {
-			System.out.println("Failed to find the file.");
-			e.printStackTrace();
-		}		
-		return buffer; 
+			return Files.readAllBytes(path);
+		} catch (IOException e) {
+			System.out.println("failed to read file at specified path");
+			return null;
+		}
 	}
-	
+
 	/**
 	 * Sends the contents of the file, packet by packet, waiting for an acknowledgment to be returned before continuing to the next packet.
 	 * 
@@ -161,12 +415,12 @@ public class ServerSpawnThread implements Runnable{
 		int i = 0, j = 0;
 		//First block starts with an ID of 1
 		int blockID = 1;
-		
+
 		//Number of blocks that will be needed to transfer file, less the one additional one block for any remaining bytes
 		int numBlocks = (bytesReadIn.length / MAX_BLOCK_SIZE);
 		//User to determine if there are any additional bytes that need to be written in the final block
 		int numRemainder = bytesReadIn.length % MAX_BLOCK_SIZE;
-		
+
 		//Looping through the number of blocks that will be sent
 		for (i = 0; i < numBlocks; i++) {
 			try {
@@ -187,7 +441,7 @@ public class ServerSpawnThread implements Runnable{
 			//ByteArrayOutputStream used to create a stream of bytes that will be sent in 516 byte DATA packets
 			ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
 			bytesToSend.write(0);
-			bytesToSend.write(OP_DATAPACKET);
+			bytesToSend.write(OP_DATA);
 			//Bitwise operations are to get the last 2 bytes of the 4 byte long integer
 			bytesToSend.write((byte) (blockID & 0xFF));
 			bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
@@ -199,24 +453,18 @@ public class ServerSpawnThread implements Runnable{
 			//Creating the DATA packet to be sent, then sending it
 			try {
 				DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), server.getClientPort());
-				try {
-					sendMessage(sendPacket);
-				} catch (IOException e) {
-					System.err.println("IOException: I/O error occured while sending server was message.");
-					e.printStackTrace();
-					System.exit(1);
-				}
+				sendMessage(sendPacket);
 			} catch (UnknownHostException e) {
 				System.err.println("UnknownHostException: could not determine IP address of host.");
 				e.printStackTrace();
 			}
 			blockID++;
 		}	
-		
+
 		//Final packet either empty (0) or remaining bytes, so this bit is to deal with sending one final DATA packet
 		ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
 		bytesToSend.write(0);
-		bytesToSend.write(OP_DATAPACKET);
+		bytesToSend.write(OP_DATA);
 		bytesToSend.write((byte) (blockID & 0xFF));
 		bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
 		//If there was exactly a multiple of 512 bytes, the final DATA packet will contain a 0 byte data section
@@ -244,120 +492,24 @@ public class ServerSpawnThread implements Runnable{
 	}
 
 	/**
-	 * Receives the contents of a file from the server.
-	 * 
-	 * @param fileName
-	 * @author Joe Frederick Samuel, Ryan Ribeiro
-	 */
-	private void getData(String fileName) {
-		//Receive file from TFTP server
-		 ByteArrayOutputStream receivedByte = receiveFile();
-		
-		 //Write File
-		 writeFile(fileName, receivedByte);
-	}
-	
-	/**
-	 * Writes data to file
-	 * 
-	 * @param filename filename to send with the read request
-	 * @param receivedByte byte array of data blocks received to write into file.
-	 * @author Joe Frederick
-	 */
-	private void writeFile(String fileName, ByteArrayOutputStream receivedByte) {
-		try {
-			OutputStream outputStream = new FileOutputStream(fileName);
-			receivedByte.writeTo(outputStream);
-		} catch (IOException e) {
-			System.out.println("Failed to write the file.");
-			e.printStackTrace();
-			System.exit(1);
-		}		
-	}
-
-	/**
-	 * Parses the received packet into data blocks 
-	 * 
-	 * @return ByteArrayOutputStream the byte stream of data blocks received
-	 * @author Joe Frederick Samuel
-	 */
-	private ByteArrayOutputStream receiveFile(){
-		ByteArrayOutputStream byteBlock = new ByteArrayOutputStream();
-		int packetCount = 1;
-		
-		DatagramPacket receivePacket = null;
-		do {
-			System.out.println("Number of TFTP packets receieved: "  + packetCount);
-			packetCount++;
-			byte[] buffer = new byte[MAX_PACKET_SIZE];
-			try {
-				receivePacket = new DatagramPacket(buffer, buffer.length, InetAddress.getLocalHost(), server.getClientPort());
-				try {
-					server.getReceiveSocket().receive(receivePacket);
-				} catch (IOException e) {
-					System.out.println("Receive socket has failed to receive packet from server.");
-					e.printStackTrace();
-					System.exit(1);
-				}
-			} catch (UnknownHostException e1) {
-				System.err.println("UnknownHostException: could not determine IP address of host while creating server response.");
-				e1.printStackTrace();
-				System.exit(1);
-			}
-			
-			//Analyzing packet data for OP codes
-			byte[] opCode = {buffer[0], buffer[1]};
-			byte[] blockID = {buffer[2], buffer[3]};
-			try {
-				byteBlock.write(opCode);
-				acknowledge(blockID);
-			} catch (IOException e) {
-				System.err.println("Failed to write OP code");	
-				e.printStackTrace();
-				System.exit(1);
-			}
-		}while(!checkLastPacket(receivePacket));
-		return byteBlock;
-	}
-	
-	/**
 	 * Acknowledges reception of server packet.
 	 * 
 	 * @param blockID byte array containing the block ID whose reception is acknowledged.
-	 * @author Joe Frederick Samuel
+	 * @author Joe Frederick Samuel, Luke Newton
 	 */
-	private void acknowledge(byte[] blockID) {
-		byte[] ack = {0, OP_ACK, blockID[0], blockID[1]};
-		DatagramPacket acknowledgePacket;
+	private void acknowledge(byte[] blockID, DatagramSocket socket) {
+		byte[] ack = {0, OP_ACK, blockID[2], blockID[3]};
+		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, serverInetAddress, receivePacket.getPort());
 		try {
-			acknowledgePacket = new DatagramPacket(ack, ack.length, InetAddress.getLocalHost(), server.getClientPort());
-			try {
-				sendSocket.send(acknowledgePacket);
-			} catch (IOException e) {
-				System.out.println("Failed to send acknowledge Packet from Client");
-				e.printStackTrace();
-				System.exit(1);
-			}
-		} catch (UnknownHostException e1) {
-			System.err.println("UnknownHostException: could not determine IP address of host while creating server response.");
-			e1.printStackTrace();
+			socket.send(ACKDatagram);
+		} catch (IOException e) {
+			System.out.println("Server error while sending ACK to client");
+			e.printStackTrace();
 			System.exit(1);
-		}	
+		}		
+		System.out.println("sent acknowledgement to client");
 	}
-	
-	/**
-	 * Checks if the packet received is the last packet for transmission
-	 * 
-	 * @param receivedPacket the packet received from the server
-	 * @return boolean	true if last packet, false otherwise.
-	 * @author Joe Frederick Samuel
-	 */
-	private boolean checkLastPacket(DatagramPacket receivedPacket) {
-		if(receivedPacket.getLength() < 512)
-			return true;
-		else
-			return false;
-	}
+
 	//End of Trivial File Transfer Protocol Methods
 
 	/**
@@ -381,10 +533,10 @@ public class ServerSpawnThread implements Runnable{
 			throw new InvalidMessageFormatException();
 
 		//check read/write byte
-		if(messageData[1] == 1) {
+		if(messageData[1] == OP_RRQ) {
 			readRequest = true;
 			writeRequest = false;
-		} else if(messageData[1] == 2) {
+		} else if(messageData[1] == OP_WRQ) {
 			readRequest = false;
 			writeRequest = true;
 		} else {
@@ -444,8 +596,9 @@ public class ServerSpawnThread implements Runnable{
 	/**
 	 * sends a datagram through the servers's sendSocket
 	 * 
-	 * @param message	the datagram packet to send
+	 * @param packet	the datagram packet to send
 	 * @throws IOException indicates and I/O error occurred while sending a message
+	 * @throws UnknownHostException thrown if unable to determine the local IP address
 	 */
 	public void sendPacket(DatagramPacket packet) throws UnknownHostException, IOException{
 		/***********************
@@ -494,11 +647,16 @@ public class ServerSpawnThread implements Runnable{
 	 * sends a datagram from the server
 	 * 
 	 * @param message	the datagram packet to send
-	 * @throws IOException indicates and I/O error occurred while sending a message
 	 */
-	public void sendMessage(DatagramPacket message) throws IOException{
-		sendSocket = new DatagramSocket();
-		sendSocket.send(message);
+	public void sendMessage(DatagramPacket message){
+		try {
+			sendSocket = new DatagramSocket();
+			sendSocket.send(message);
+		} catch (IOException e) {
+			System.out.println("IOException: I/O error occured while server sending message");
+			e.printStackTrace();
+			System.exit(1);
+		}
 		sendSocket.close();
 	}
 
