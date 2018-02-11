@@ -50,9 +50,9 @@ public class ServerSpawnThread implements Runnable {
 	private static final byte OP_ACK = 4;
 	private static final byte OP_ERROR = 5;
 	//Error codes
+	private static final byte FILE_NOT_FOUND = 1;
 	private static final byte DISK_FULL_CODE = 3;
-
-
+	
 	private InetAddress serverInetAddress = null;
 	/**
 	 * Constructor
@@ -395,18 +395,26 @@ public class ServerSpawnThread implements Runnable {
 	}
 
 	/**
-	 * Reads the contents of the file and stores it as an array of bytes.
+	 * Reads the contents of the file and stores it as an array of bytes. If the requested file is not found, 
+	 * print error message and send error packet
 	 * 
 	 * @param filename the name of the file to be read
 	 * @return contents of the file read in
-	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
+	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton, Kevin Sun
 	 */
 	public byte[] readFile(String filename) {
 		Path path = Paths.get(filename);
 		try {
 			return Files.readAllBytes(path);
 		} catch (IOException e) {
-			System.out.println("failed to read file at specified path");
+			//sends error packet to client
+			System.out.println("Failed to read file at specified path");
+			try {
+					createAndSendErrorPacket(FILE_NOT_FOUND, "Failed to read file - File not found.");
+				} catch (IOException er) {
+					System.err.println("Failed creating/sending error packet");
+					er.printStackTrace();
+				}
 			return null;
 		}
 	}
