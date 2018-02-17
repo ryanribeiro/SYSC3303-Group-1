@@ -10,11 +10,11 @@ ServerClientConnection.java
 Server.java:
 	represents the server in the system.
 ServerSpawnThread.java
-	thread spawned by server to process and respond to a recieved message.
+	thread spawned by server to process and respond to a received message.
 ServerQuitRunnable.java
 	thread spawned by server to allow user on server end to close server.
 InvalidMessageFormatException.java
-	represents an exception thown when a ServerSpawnThread processes an invalid message
+	represents an exception thrown when a ServerSpawnThread processes an invalid message
 	
 ----------------------
 TO RUN THE ASSIGNMENT
@@ -110,7 +110,7 @@ Ryan:
 
 Joe:
 - File already exists error
-- UML diagrams
+- UML diagrams and javadoc
 	
 ---------------
 DESIGN CHOICES
