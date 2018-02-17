@@ -5,8 +5,16 @@ Client.java:
 	represents the client in the system.
 ErrorSimulator.java: 
 	represents the intermediate host in the system.
+ServerClientConnection.java
+	represents a connection between a client and server for data transfer. spawned by error simulator.
 Server.java:
 	represents the server in the system.
+ServerSpawnThread.java
+	thread spawned by server to process and respond to a recieved message.
+ServerQuitRunnable.java
+	thread spawned by server to allow user on server end to close server.
+InvalidMessageFormatException.java
+	represents an exception thown when a ServerSpawnThread processes an invalid message
 	
 ----------------------
 TO RUN THE ASSIGNMENT
@@ -95,7 +103,7 @@ Kevin:
 
 Luke:
 - Fixing errors from iteration 1
-- Timing diagram
+- Timing diagrams
 
 Ryan:
 - Access violation error
