@@ -7,8 +7,6 @@ ErrorSimulator.java:
 	represents the intermediate host in the system.
 Server.java:
 	represents the server in the system.
-InvalidMessageFormatException.java:
-	subclass of Exception which is thrown when the server attempts to parse a message of invalid format.
 	
 ----------------------
 TO RUN THE ASSIGNMENT
@@ -22,11 +20,7 @@ Open the project in Eclipse and run each in the following order:
 NOTE: By default, each program will timeout after 5 seconds of waiting for a message, so programs must
 be opened in rapid succession (or see section below for how to disable timeouts)
 
-At this point, the programs will likely have completed the eleven required iterations and all information
-will be able to be seen in the console. The the drop down next to the option "Display selected Console"
- in the top right corner of the console window will allow you to switch between the console outputs for 
-the client, server, and ErrorSimulator. Additional consoles can be opened with the "Open Console" option 
-in the top right corner of the  console by selecting "Open Console" -> "3 New Console View" to view multiple
+You should see a startup message for each program when it runs. The client program will ask you if you would like to make a read request or a write request. To make a request, type <request> <file name> and hit enter. For example, to make a read request from the server, type "read test.txt". Once the transfer is complete, you may save the file under a new name. The client will then prompt you for another command. You may type "quit" to shut down the client and also type "quit" to shut down the server. The drop down next to the option "Display selected Console" in the top right corner of the console window will allow you to switch between the console outputs for the client, server, and ErrorSimulator. Additional consoles can be opened with the "Open Console" option in the top right corner of the  console by selecting "Open Console" -> "3 New Console View" to view multiple
 outputs at once.
 
 ----------------------------------
@@ -94,25 +88,20 @@ Responsibilities breakdown
 --------------------------
 Cameron:
 - Reviewing/merging 
-- Refactoring original server/client code from assignment 0 to iteration 1
+- Disk full error
 
 Kevin:
-- Segments of code from assignment 1 used in iteration 1
-- Implemented multi-threading in server
+- File not found error
 
 Luke:
-- Majority of code from assignment 1 used in iteration 1
-- Implemented server shut down
--- helped with server multi-threading
-
+- Fixing errors from iteration 1
+- Timing diagram
 
 Ryan:
-- Implemented steady-state file transfer/TFTP protocols between client and server
+- Access violation error
 
 Joe:
-- Building TFTP stack on top of UDP network protocol
-- OP Code base and TFTP packet parsing
-- Implemented steady-state file transfer/TFTP protocols between client and server
+- File already exists error
 - UML diagrams
 	
 ---------------
