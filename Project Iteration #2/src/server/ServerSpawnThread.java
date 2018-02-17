@@ -1,6 +1,7 @@
 package server;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.SyncFailedException;
@@ -52,6 +53,7 @@ public class ServerSpawnThread implements Runnable {
 	//Error codes
 	private static final byte FILE_NOT_FOUND = 1;
 	private static final byte DISK_FULL_CODE = 3;
+	private static final byte FILE_ALREADY_EXISTS = 6;
 	
 	private InetAddress serverInetAddress = null;
 	/**
@@ -293,6 +295,19 @@ public class ServerSpawnThread implements Runnable {
 		
 		System.out.println("\nFile to write:");
 		System.out.println(new String(fileContents) + "\n");
+		
+		//Check for file already exists
+		File file = new File(fileName);
+		if(file.exists() && file.isFile()) {
+			System.err.println("Error: File Already exists.");
+			try {
+				createAndSendErrorPacket(FILE_ALREADY_EXISTS, "File Already Exists.");
+			} catch (IOException e) {
+				System.err.println("Failed creating/sending error packet");
+				e.printStackTrace();
+			}
+		}
+		else {
 		try {
 			FileOutputStream fileWriter = new FileOutputStream(/*"Add path here" +*/fileName); //fileName also includes path. Default path is project folder (may differ from machine to machine)
 			fileWriter.write(fileContents);
@@ -315,7 +330,8 @@ public class ServerSpawnThread implements Runnable {
 			}
 			e.printStackTrace();
 			//System.exit(1);
-		}		
+		}	
+		}
 	}
 	
 	/**
