@@ -90,6 +90,10 @@ public class Client {
 			System.out.println("Failed to write the file.");
 			e.printStackTrace();
 			System.exit(1);
+		} catch (SecurityException se) {
+			System.out.println("Access violation while trying to write file from server.");
+			se.printStackTrace();
+			System.exit(1);
 		}		
 	}
 
@@ -544,6 +548,9 @@ public class Client {
 			return Files.readAllBytes(path);
 		} catch (IOException e) {
 			System.out.println("failed to read file at specified path");
+			return null;
+		} catch (SecurityException se) {
+			System.out.println("Access violation while trying to read file from server.");
 			return null;
 		}
 	}
