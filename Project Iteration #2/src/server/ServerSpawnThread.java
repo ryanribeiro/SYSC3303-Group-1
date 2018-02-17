@@ -119,7 +119,7 @@ public class ServerSpawnThread implements Runnable {
 	}
 
 	/**
-	 * 
+	 * Reads a file requested from client.
 	 * 
 	 * @param fileName the name of the file to read from the server
 	 */
