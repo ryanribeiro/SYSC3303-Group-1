@@ -701,23 +701,27 @@ public class ServerSpawnThread implements Runnable {
 		sendSocket.close();
 	}
 	
-	
+	/**
+	 * Creates and sends an error packet on the port that is being serviced.
+	 * @author Cameron Rushton
+	 * @param errorCode
+	 * @param msg
+	 * @throws IOException
+	 */
 	public void createAndSendErrorPacket(byte errorCode, String msg) throws IOException {
 		 /*************************
 		 * Check for input errors *
 		 *************************/
-		boolean doRun = true;
 		if (errorCode < 1 || errorCode > 6) {
 			System.err.println("Unexpected error code given. Error packet not sent.");
-			doRun = false;
+			
 		} else if (msg == null) {
-			System.err.println("Msg received is null. Error packet not sent.");
-			doRun = false;
-		}
+			System.err.println("Error message is null. Error packet not sent.");
+			
+		} else {
 		 /*********************************
 		 * Construct error message & send *
 		 *********************************/
-		if (doRun) {
 			ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
 			
 			byteStream.write(0);
@@ -734,7 +738,6 @@ public class ServerSpawnThread implements Runnable {
 			
 			sendMessage(errorPacket);
 		}
-		
 		
 	}
 
