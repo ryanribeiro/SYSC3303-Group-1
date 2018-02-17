@@ -52,6 +52,7 @@ public class ServerSpawnThread implements Runnable {
 	private static final byte OP_ERROR = 5;
 	//Error codes
 	private static final byte FILE_NOT_FOUND = 1;
+	private static final byte ACCESS_VIOLATION_CODE = 2;
 	private static final byte DISK_FULL_CODE = 3;
 	private static final byte FILE_ALREADY_EXISTS = 6;
 	
@@ -431,6 +432,15 @@ public class ServerSpawnThread implements Runnable {
 					System.err.println("Failed creating/sending error packet");
 					er.printStackTrace();
 				}
+			return null;
+		} catch (SecurityException se) {
+			System.out.println("Access violation while trying to read file from server.");
+			try {
+				createAndSendErrorPacket(ACCESS_VIOLATION_CODE, "Failed access file - Access Violation.");
+			} catch (IOException er) {
+				System.err.println("Failed creating/sending error packet");
+				er.printStackTrace();
+			}
 			return null;
 		}
 	}
