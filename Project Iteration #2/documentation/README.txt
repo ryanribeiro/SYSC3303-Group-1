@@ -28,6 +28,9 @@ Open the project in Eclipse and run each in the following order:
 NOTE: By default, each program will timeout after 5 seconds of waiting for a message, so programs must
 be opened in rapid succession (or see section below for how to disable timeouts)
 
+**please ensure that your project folder has a folder called "SERVERDATA". This represents a seperate memeory space for the server while
+both the client and server are on the same machines**
+
 You should see a startup message for each program when it runs. The client program will ask you if you would like to make a read request or a write request. To make a request, type <request> <file name> and hit enter. For example, to make a read request from the server, type "read test.txt". Once the transfer is complete, you may save the file under a new name. The client will then prompt you for another command. You may type "quit" to shut down the client and also type "quit" to shut down the server. The drop down next to the option "Display selected Console" in the top right corner of the console window will allow you to switch between the console outputs for the client, server, and ErrorSimulator. Additional consoles can be opened with the "Open Console" option in the top right corner of the  console by selecting "Open Console" -> "3 New Console View" to view multiple
 outputs at once.
 
