@@ -291,7 +291,7 @@ public class ServerSpawnThread implements Runnable {
 	 * @author Joe Frederick Samuel, Luke Newton
 	 */
 	private void writeFile(String fileName) {
-		
+		fileName = "SERVERDATA/" + fileName;
 		byte[] fileContents = receiveFile();
 		
 		System.out.println("\nFile to write:");
@@ -310,7 +310,7 @@ public class ServerSpawnThread implements Runnable {
 		}
 		else {
 		try {
-			FileOutputStream fileWriter = new FileOutputStream(/*"Add path here" +*/fileName); //fileName also includes path. Default path is project folder (may differ from machine to machine)
+			FileOutputStream fileWriter = new FileOutputStream(fileName); //fileName also includes path. Default path is project folder (may differ from machine to machine)
 			fileWriter.write(fileContents);
 			fileWriter.close();
 		} catch (SyncFailedException err) {
