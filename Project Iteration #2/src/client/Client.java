@@ -90,6 +90,10 @@ public class Client {
 			System.out.println("Failed to write the file.");
 			e.printStackTrace();
 			System.exit(1);
+		} catch (SecurityException se) {
+			System.out.println("Access violation while trying to write file from server.");
+			se.printStackTrace();
+			System.exit(1);
 		}		
 	}
 
@@ -377,7 +381,19 @@ public class Client {
 
 			//ensure we got an ACK repsponse
 			if(ACKDatagram.getData()[1] != OP_ACK){
-				System.out.println("Error: expected ACK, received unknown message.");
+				//Checks if it was an error packet
+				if (ACKDatagram.getData()[1] == OP_ERROR) {
+					int i = 0;
+					ByteArrayOutputStream textStream = new ByteArrayOutputStream();
+					//Retrieves the error message sent in the packet
+					for (i = 4; ACKDatagram.getData()[i] != 0; i++) {
+						textStream.write(ACKDatagram.getData()[i]);
+					}
+					String errorMessage = textStream.toString();
+					System.out.println("\n" + errorMessage + "\n");
+				} else {
+					System.out.println("Error: expected ACK, received unknown message.");
+				}
 				return;
 			}
 			//ensure we got an ACK matching the block number sent
@@ -545,6 +561,9 @@ public class Client {
 		} catch (IOException e) {
 			System.out.println("failed to read file at specified path");
 			return null;
+		} catch (SecurityException se) {
+			System.out.println("Access violation while trying to read file from server.");
+			return null;
 		}
 	}
 
@@ -555,7 +574,7 @@ public class Client {
 	 */
 	private void printHelpMenu() {
 		System.out.println("type 'read' followed by a file name to begin a read request.");
-		System.out.println("type 'write' followed by a file name to begin a read request.");
+		System.out.println("type 'write' followed by a file name to begin a write request.");
 		System.out.println("type 'quit' to shutdown the client.");
 		System.out.println("type 'help' to display this message again.\n");
 	}

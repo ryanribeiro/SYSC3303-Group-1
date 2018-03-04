@@ -5,10 +5,16 @@ Client.java:
 	represents the client in the system.
 ErrorSimulator.java: 
 	represents the intermediate host in the system.
+ServerClientConnection.java
+	represents a connection between a client and server for data transfer. spawned by error simulator.
 Server.java:
 	represents the server in the system.
-InvalidMessageFormatException.java:
-	subclass of Exception which is thrown when the server attempts to parse a message of invalid format.
+ServerSpawnThread.java
+	thread spawned by server to process and respond to a received message.
+ServerQuitRunnable.java
+	thread spawned by server to allow user on server end to close server.
+InvalidMessageFormatException.java
+	represents an exception thrown when a ServerSpawnThread processes an invalid message
 	
 ----------------------
 TO RUN THE ASSIGNMENT
@@ -22,11 +28,10 @@ Open the project in Eclipse and run each in the following order:
 NOTE: By default, each program will timeout after 5 seconds of waiting for a message, so programs must
 be opened in rapid succession (or see section below for how to disable timeouts)
 
-At this point, the programs will likely have completed the eleven required iterations and all information
-will be able to be seen in the console. The the drop down next to the option "Display selected Console"
- in the top right corner of the console window will allow you to switch between the console outputs for 
-the client, server, and ErrorSimulator. Additional consoles can be opened with the "Open Console" option 
-in the top right corner of the  console by selecting "Open Console" -> "3 New Console View" to view multiple
+**please ensure that your project folder has a folder called "SERVERDATA". This represents a seperate memeory space for the server while
+both the client and server are on the same machines**
+
+You should see a startup message for each program when it runs. The client program will ask you if you would like to make a read request or a write request. To make a request, type <request> <file name> and hit enter. For example, to make a read request from the server, type "read test.txt". Once the transfer is complete, you may save the file under a new name. The client will then prompt you for another command. You may type "quit" to shut down the client and also type "quit" to shut down the server. The drop down next to the option "Display selected Console" in the top right corner of the console window will allow you to switch between the console outputs for the client, server, and ErrorSimulator. Additional consoles can be opened with the "Open Console" option in the top right corner of the  console by selecting "Open Console" -> "3 New Console View" to view multiple
 outputs at once.
 
 ----------------------------------
@@ -89,31 +94,50 @@ TIMEOUT_MILLISECONDS:
 MAX_PACKET_SIZE:
 	This integer value specifies the maximum size of the data portion of a DatagramPacket.
 
+-----------------------
+Testing (Normal/Errors)
+-----------------------
+Testing
+1) Read Request
+A read request can be tested by typing the command 'read' and then typing in the name of a file that exists in the project's main folder. Some of our used files include 'sons_of_martha.txt', 'test.txt', and 'two_cities.txt'.
+
+2) Write Request
+A write request can be tested by typing the command 'write' and then typing in the name of a file that exists in the project's main folder. Some of our used files include 'sons_of_martha.txt', 'test.txt', and 'two_cities.txt', and the files created by the write request can be found in the SERVERDATA folder.
+
+Errors
+1) FileNotFound
+Simulated by trying to read/write a file that does not exist in the folder.
+
+2) AccessViolation
+Simulated by changing the premissions on the SERVERDATA folder, and then attempting to write to it. Probably not possible to recreate at school, since the computers there do not have ADMIN premissions.
+
+3) DiskFull
+Simulated using a small USB, filling it up with junk files, and then attempting to save to it.
+
+4) FileAlreadyExists
+Simulated by trying to write to the server with a file name that already exists.
+
 --------------------------
 Responsibilities breakdown
 --------------------------
 Cameron:
 - Reviewing/merging 
-- Refactoring original server/client code from assignment 0 to iteration 1
+- Disk full error
 
 Kevin:
-- Segments of code from assignment 1 used in iteration 1
-- Implemented multi-threading in server
+- File not found error
 
 Luke:
-- Majority of code from assignment 1 used in iteration 1
-- Implemented server shut down
--- helped with server multi-threading
-
+- Fixing errors from iteration 1
+- Timing diagrams
 
 Ryan:
-- Implemented steady-state file transfer/TFTP protocols between client and server
+- Access violation error
+- Bug fixing / adding a print out for the error messages received in error packets
 
 Joe:
-- Building TFTP stack on top of UDP network protocol
-- OP Code base and TFTP packet parsing
-- Implemented steady-state file transfer/TFTP protocols between client and server
-- UML diagrams
+- File already exists error
+- UML diagrams and javadoc
 	
 ---------------
 DESIGN CHOICES

@@ -1,8 +1,10 @@
 package server;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.SyncFailedException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -21,7 +23,7 @@ import java.util.List;
  * 
  * @author Kevin Sun, Luke Newton, Joe Frederick Samuel, Ryan Ribeiro
  */
-public class ServerSpawnThread implements Runnable{	
+public class ServerSpawnThread implements Runnable {
 	//the message to process and respond to
 	private DatagramPacket receivePacket;
 	//socket to send a response to message
@@ -48,8 +50,12 @@ public class ServerSpawnThread implements Runnable{
 	private static final byte OP_DATA = 3;
 	private static final byte OP_ACK = 4;
 	private static final byte OP_ERROR = 5;
-
-
+	//Error codes
+	private static final byte FILE_NOT_FOUND = 1;
+	private static final byte ACCESS_VIOLATION_CODE = 2;
+	private static final byte DISK_FULL_CODE = 3;
+	private static final byte FILE_ALREADY_EXISTS = 6;
+	
 	private InetAddress serverInetAddress = null;
 	/**
 	 * Constructor
@@ -96,7 +102,7 @@ public class ServerSpawnThread implements Runnable{
 				if (readRequest) {
 					readRequest(fileName);
 				} else if (writeRequest){
-					writeRequest(fileName);
+					writeFile(fileName);
 				} else {
 					System.err.println("Error: Request is neither a write or a read.");
 					System.exit(1);
@@ -113,13 +119,14 @@ public class ServerSpawnThread implements Runnable{
 	}
 
 	/**
-	 * Reads file requested by Client.
+	 * Reads a file requested from client.
 	 * 
 	 * @param fileName the name of the file to read from the server
 	 */
 	private void readRequest(String fileName){
 		//read in the specified file
-		byte[] fileData = readFile(fileName);
+		byte[] fileData = readFile("SERVERDATA/" + fileName);
+		System.out.println("Reading file named " + fileName);
 		String fileText = new String(fileData);
 		System.out.println("File to send:\n" + fileText);
 
@@ -128,7 +135,7 @@ public class ServerSpawnThread implements Runnable{
 	}
 
 	/**
-	 * Sends the contents of a file to the server.
+	 * Sends the contents of a file to the client through error sim.
 	 * 
 	 * @param fileText the file data to send
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
@@ -219,7 +226,7 @@ public class ServerSpawnThread implements Runnable{
 				System.out.println("Error: ACK block number does not match sent block number.");
 				return;
 			}
-		}while(true);
+		} while(true);
 		sendReceiveSocket.close();
 	}
 
@@ -276,23 +283,6 @@ public class ServerSpawnThread implements Runnable{
 		return result;
 	}
 
-
-	/**
-	 * recieve file from client and write to memory
-	 * 
-	 * @param fileName
-	 */
-	private void writeRequest(String filename) {
-		byte[] fileData = receiveFile();
-		
-		System.out.println("\nFile to write:");
-		System.out.println(new String(fileData) + "\n");
-		
-		writeFile(fileData, filename);
-	}
-
-	//Trivial File Transfer Protocol Methods
-
 	/**
 	 * Writes data to file
 	 * 
@@ -300,16 +290,57 @@ public class ServerSpawnThread implements Runnable{
 	 * @param file contents byte array of data blocks received to write into file.
 	 * @author Joe Frederick Samuel, Luke Newton
 	 */
-	private void writeFile(byte[] fileContents, String fileName) {
+	private void writeFile(String fileName) {
+		fileName = "SERVERDATA/" + fileName;
+		byte[] fileContents = receiveFile();
+		
+		System.out.println("\nFile to write:");
+		System.out.println(new String(fileContents) + "\n");
+		
+		//Check for file already exists
+		File file = new File(fileName);
+		if(file.exists() && file.isFile()) {
+			System.err.println("Error: File Already exists.");
+			try {
+				createAndSendErrorPacket(FILE_ALREADY_EXISTS, "File Already Exists.");
+			} catch (IOException e) {
+				System.err.println("Failed creating/sending error packet");
+				e.printStackTrace();
+			}
+		}
+		else {
 		try {
-			FileOutputStream fileWriter = new FileOutputStream(fileName);
+			FileOutputStream fileWriter = new FileOutputStream(fileName); //fileName also includes path. Default path is project folder (may differ from machine to machine)
 			fileWriter.write(fileContents);
 			fileWriter.close();
+		} catch (SyncFailedException err) {
+			
+			//send error packet
+			
+			//Thread should terminate on it's own once above is complete
+			
 		} catch (IOException e) {
-			System.out.println("Failed to write the file.");
+			System.err.println("Failed to write the file.");
+			if (e.getMessage().equals("There is not enough space on the disk")) { //create and send error code 3 packet
+				try {
+					createAndSendErrorPacket(DISK_FULL_CODE, "Failed to write file - disk full.");
+				} catch (IOException er) {
+					System.err.println("Failed creating/sending error packet");
+					er.printStackTrace();
+				}
+			}
 			e.printStackTrace();
-			System.exit(1);
-		}		
+			//System.exit(1);
+		}	catch (SecurityException se) {
+			System.out.println("Access violation while trying to read file from server.");
+			try {
+				createAndSendErrorPacket(ACCESS_VIOLATION_CODE, "Failed access file - Access Violation.");
+			} catch (IOException er) {
+				System.err.println("Failed creating/sending error packet");
+				er.printStackTrace();
+			}
+		}
+		}
 	}
 	
 	/**
@@ -340,13 +371,13 @@ public class ServerSpawnThread implements Runnable{
 			e.printStackTrace();
 			System.exit(1);
 		}
-		do{
-			//send acknowledgement to server
+		do {
+			//send acknowledgement to client
 			acknowledge(intToByteArray(blockNumber), sendReceiveSocket);
 			
 			if(response != null && response.getLength() < MAX_PACKET_SIZE)
 				break;
-			
+				
 			//recieve server message
 			try {
 				sendReceiveSocket.receive(response);
@@ -388,18 +419,35 @@ public class ServerSpawnThread implements Runnable{
 	}
 
 	/**
-	 * Reads the contents of the file and stores it as an array of bytes.
+	 * Reads the contents of the file and stores it as an array of bytes. If the requested file is not found, 
+	 * print error message and send error packet
 	 * 
 	 * @param filename the name of the file to be read
 	 * @return contents of the file read in
-	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
+	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton, Kevin Sun
 	 */
 	public byte[] readFile(String filename) {
 		Path path = Paths.get(filename);
 		try {
 			return Files.readAllBytes(path);
 		} catch (IOException e) {
-			System.out.println("failed to read file at specified path");
+			//sends error packet to client
+			System.out.println("Failed to read file at specified path");
+			try {
+					createAndSendErrorPacket(FILE_NOT_FOUND, "Failed to read file - File not found.");
+				} catch (IOException er) {
+					System.err.println("Failed creating/sending error packet");
+					er.printStackTrace();
+				}
+			return null;
+		} catch (SecurityException se) {
+			System.out.println("Access violation while trying to read file from server.");
+			try {
+				createAndSendErrorPacket(ACCESS_VIOLATION_CODE, "Failed access file - Access Violation.");
+			} catch (IOException er) {
+				System.err.println("Failed creating/sending error packet");
+				er.printStackTrace();
+			}
 			return null;
 		}
 	}
@@ -475,20 +523,21 @@ public class ServerSpawnThread implements Runnable{
 				bytesToSend.write(bytesReadIn[i]);
 			}
 		}
-		byte[] data = bytesToSend.toByteArray();
-		try {
-			DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), server.getClientPort());
+		//byte[] data = bytesToSend.toByteArray();
+		//try {
+			//DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), server.getClientPort());
 			try {
-				sendPacket(sendPacket);
+				//TODO: Rename to createAndSendPacket(); (not ACK format though)
+				sendPacket(); //This used to send a packet but do nothing with it since the packet is created in the method anyway
 			} catch (IOException e) {
 				System.err.println("IOException: I/O error occured while sending message to client.");
 				e.printStackTrace();
 				System.exit(1);
 			}
-		} catch (UnknownHostException e) {
-			System.err.println("UnknownHostException: could not determine IP address of host.");
-			e.printStackTrace();
-		}
+		//} catch (UnknownHostException e) {
+			//System.err.println("UnknownHostException: could not determine IP address of host.");
+			//e.printStackTrace();
+		//}
 	}
 
 	/**
@@ -509,8 +558,6 @@ public class ServerSpawnThread implements Runnable{
 		}		
 		System.out.println("sent acknowledgement to client");
 	}
-
-	//End of Trivial File Transfer Protocol Methods
 
 	/**
 	 * ensures the received message is of proper format. format follows:
@@ -594,14 +641,15 @@ public class ServerSpawnThread implements Runnable{
 	}
 
 	/**
-	 * sends a datagram through the servers's sendSocket
+	 * Wrapper for sendMessage().
+	 * Sends a datagram through the server's sendSocket
 	 * 
-	 * @param packet	the datagram packet to send
+	 * @param packet the datagram packet to send
 	 * @throws IOException indicates and I/O error occurred while sending a message
 	 * @throws UnknownHostException thrown if unable to determine the local IP address
 	 */
-	public void sendPacket(DatagramPacket packet) throws UnknownHostException, IOException{
-		/***********************
+	public void sendPacket() throws UnknownHostException, IOException {
+		 /***********************
 		 * Create & Send Packet *
 		 ***********************/
 		byte[] responseData = this.createPacketData();
@@ -609,7 +657,6 @@ public class ServerSpawnThread implements Runnable{
 		DatagramPacket sendPacket = new DatagramPacket(responseData, responseData.length,
 				InetAddress.getLocalHost(), clientPort);
 
-		//print data to send to intermediate host
 		System.out.print("Server Response: \nTo ");
 		printPacketInfo(sendPacket);
 
@@ -620,10 +667,11 @@ public class ServerSpawnThread implements Runnable{
 
 	/**
 	 * formats a message as a response to the appropriate request
+	 * Used exclusively for read/write
 	 * 
 	 * @return the message converted into a byte array with proper format
 	 */
-	public byte[] createPacketData(){
+	public byte[] createPacketData() {
 		ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
 
 		byteStream.write(0);
@@ -646,7 +694,7 @@ public class ServerSpawnThread implements Runnable{
 	/**
 	 * sends a datagram from the server
 	 * 
-	 * @param message	the datagram packet to send
+	 * @param message the datagram packet to send
 	 */
 	public void sendMessage(DatagramPacket message){
 		try {
@@ -658,6 +706,46 @@ public class ServerSpawnThread implements Runnable{
 			System.exit(1);
 		}
 		sendSocket.close();
+	}
+	
+	/**
+	 * Creates and sends an error packet on the port that is being serviced.
+	 * @author Cameron Rushton
+	 * @param errorCode
+	 * @param msg
+	 * @throws IOException
+	 */
+	public void createAndSendErrorPacket(byte errorCode, String msg) throws IOException {
+		 /*************************
+		 * Check for input errors *
+		 *************************/
+		if (errorCode < 1 || errorCode > 6) {
+			System.err.println("Unexpected error code given. Error packet not sent.");
+			
+		} else if (msg == null) {
+			System.err.println("Error message is null. Error packet not sent.");
+			
+		} else {
+		 /*********************************
+		 * Construct error message & send *
+		 *********************************/
+			ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+			
+			byteStream.write(0);
+			byteStream.write(OP_ERROR);
+			byteStream.write(0);
+			byteStream.write(errorCode);
+			byteStream.write(msg.getBytes()); //<- IOException source
+			byteStream.write(0);
+			
+			byte[] responseData = byteStream.toByteArray();
+
+			DatagramPacket errorPacket = new DatagramPacket(responseData, responseData.length,
+					InetAddress.getLocalHost(), clientPort); //<- IOException source
+			
+			sendMessage(errorPacket);
+		}
+		
 	}
 
 	/**
