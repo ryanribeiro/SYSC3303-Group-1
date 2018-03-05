@@ -38,7 +38,9 @@ public class ServerSpawnThread implements Runnable {
 	//Error flag indicating something went wrong and an ACK should not be sent
 	private boolean noErrors = true;
 	//Last block number received
-	int lastBlockNum;
+	private int lastBlockNum;
+	//Default path to read/write to/from
+	private final String DEFAULT_PATH = "SERVERDATA/";
 
 	//port number of client to send response to
 	private int clientPort;
@@ -103,9 +105,11 @@ public class ServerSpawnThread implements Runnable {
 			try {
 				parseMessage();
 				if (readRequest) {
-					readRequest(fileName);
-				} else if (writeRequest){
-					writeFile(fileName);
+					sendData(readFile(DEFAULT_PATH + fileName));
+
+				} else if (writeRequest) {
+					writeFile(DEFAULT_PATH + fileName, receiveFile());
+
 				} else {
 					System.err.println("Error: Request is neither a write or a read.");
 					System.exit(1);
@@ -122,22 +126,43 @@ public class ServerSpawnThread implements Runnable {
 	}
 
 	/**
-	 * Reads a file requested from client.
-	 * 
-	 * @param fileName the name of the file to read from the server
+	 * Reads the contents of the file and stores it as an array of bytes. If the requested file is not found,
+	 * print error message and send error packet
+	 *
+	 * @param filename the name of the file to be read
+	 * @return contents of the file read in
+	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton, Kevin Sun
 	 */
-	private void readRequest(String fileName){
-		//read in the specified file
-		byte[] fileData; //fileData may be null
-		fileData = readFile("SERVERDATA/" + fileName);
+	private String readFile(String filename) {
+		Path path = Paths.get(filename);
 		System.out.println("Reading file named " + fileName);
-		String fileText = new String(fileData);
-		System.out.println("File to send:\n" + fileText);
 
-		//transfer file to client
-		sendData(fileText);
+		try {
+			String fileContents = new String(Files.readAllBytes(path));
+			System.out.println("File contents to send:\n" + fileContents);
+			return fileContents;
+
+		} catch (IOException e) {
+			//sends error packet to client
+			System.out.println("Failed to read file at specified path");
+			try {
+				createAndSendErrorPacket(FILE_NOT_FOUND, "Failed to read file - File not found.");
+			} catch (IOException er) {
+				System.err.println("Failed creating/sending error packet");
+				er.printStackTrace();
+			}
+			return null;
+		} catch (SecurityException se) {
+			System.out.println("Access violation while trying to read file from server.");
+			try {
+				createAndSendErrorPacket(ACCESS_VIOLATION_CODE, "Failed access file - Access Violation.");
+			} catch (IOException er) {
+				System.err.println("Failed creating/sending error packet");
+				er.printStackTrace();
+			}
+			return null;
+		}
 	}
-
 	/**
 	 * Sends the contents of a file to the client through error sim.
 	 * 
@@ -145,7 +170,7 @@ public class ServerSpawnThread implements Runnable {
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 */
 	private void sendData(String fileText){
-		System.out.println("USING sendData FOR FILE TRANSFER");
+
 		//split file text into chunks for transfer
 		byte[][] fileData = splitByteArray(fileText.getBytes());
 
@@ -294,16 +319,14 @@ public class ServerSpawnThread implements Runnable {
 	 * @param fileName name of the new file to write to
 	 * @author Joe Frederick Samuel, Luke Newton, CRushton
 	 */
-	private void writeFile(String fileName) {
-		fileName = "SERVERDATA/" + fileName;
-		byte[] fileContents = receiveFile();
+	private void writeFile(String fileName, byte[] fileContents) {
 		
 		System.out.println("\nFile to write:");
 		System.out.println(new String(fileContents) + "\n");
 		
 		//Check for file already exists
 		File file = new File(fileName);
-		if(file.exists() && file.isFile()) {
+		if (file.exists() && file.isFile()) {
 			System.err.println("Error: File Already exists.");
 			try {
 				createAndSendErrorPacket(FILE_ALREADY_EXISTS, "File Already Exists.");
@@ -330,7 +353,7 @@ public class ServerSpawnThread implements Runnable {
 				e.printStackTrace();
 
 			} catch (SecurityException se) {
-				System.out.println("Access violation while trying to read file from server.");
+				System.err.println("Access violation while trying to read file from server.");
 				try {
 					createAndSendErrorPacket(ACCESS_VIOLATION_CODE, "Failed access file - Access Violation.");
 				} catch (IOException er) {
@@ -423,123 +446,6 @@ public class ServerSpawnThread implements Runnable {
 	}
 
 	/**
-	 * Reads the contents of the file and stores it as an array of bytes. If the requested file is not found, 
-	 * print error message and send error packet
-	 * 
-	 * @param filename the name of the file to be read
-	 * @return contents of the file read in
-	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton, Kevin Sun
-	 */
-	private byte[] readFile(String filename) {
-		Path path = Paths.get(filename);
-		try {
-			return Files.readAllBytes(path);
-		} catch (IOException e) {
-			//sends error packet to client
-			System.out.println("Failed to read file at specified path");
-			try {
-					createAndSendErrorPacket(FILE_NOT_FOUND, "Failed to read file - File not found.");
-				} catch (IOException er) {
-					System.err.println("Failed creating/sending error packet");
-					er.printStackTrace();
-				}
-			return null;
-		} catch (SecurityException se) {
-			System.out.println("Access violation while trying to read file from server.");
-			try {
-				createAndSendErrorPacket(ACCESS_VIOLATION_CODE, "Failed access file - Access Violation.");
-			} catch (IOException er) {
-				System.err.println("Failed creating/sending error packet");
-				er.printStackTrace();
-			}
-			return null;
-		}
-	}
-
-	/*
-	 * Sends the contents of the file, packet by packet, waiting for an acknowledgment to be returned before continuing to the next packet.
-	 *
-	 * @param bytesReadIn an array of bytes containing the contents of the file to be sent
-	 * @author Joe Frederick Samuel, Ryan Ribeiro
-	 */
-	/*protected void sendFile(byte[] bytesReadIn) {
-		//loop control variables
-		int i, j;
-		//First block starts with an ID of 1
-		int blockID = 1;
-
-		//Number of blocks that will be needed to transfer file, less the one additional one block for any remaining bytes
-		int numBlocks = (bytesReadIn.length / MAX_BLOCK_SIZE);
-		//User to determine if there are any additional bytes that need to be written in the final block
-		int numRemainder = bytesReadIn.length % MAX_BLOCK_SIZE;
-
-		//Looping through the number of blocks that will be sent
-		for (i = 0; i < numBlocks; i++) {
-			try {
-				//Requires acknowledgement before sending the next DATA packet
-				DatagramPacket receiveAcknowledgement = server.waitReceiveMessage();
-				byte[] ACKData = receiveAcknowledgement.getData();
-				//Checks the acknowledgement is for the correct block
-				//Bitwise operations are to get the last 2 bytes of the 4 byte long integer
-				if (ACKData[2] != (byte) ((blockID - 1) & 0xFF) || ACKData[3] != (((blockID - 1) >> 8) & 0xFF)) {
-					System.err.println("ACK message failed.");
-					System.exit(1);
-				}
-			} catch (IOException e) {
-				System.err.println("IOException: I/O error occured while server waiting to recieve message");
-				e.printStackTrace();
-				System.exit(1);
-			}
-			//ByteArrayOutputStream used to create a stream of bytes that will be sent in 516 byte DATA packets
-			ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
-			bytesToSend.write(0);
-			bytesToSend.write(OP_DATA);
-			//Bitwise operations are to get the last 2 bytes of the 4 byte long integer
-			bytesToSend.write((byte) (blockID & 0xFF));
-			bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
-			//Looping through all bytes, one block at a time
-			for (j = MAX_BLOCK_SIZE * i; j < bytesReadIn.length; j++) {
-				bytesToSend.write(bytesReadIn[j]);
-			}
-			byte[] data = bytesToSend.toByteArray();
-			//Creating the DATA packet to be sent, then sending it
-			try {
-				DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), server.getClientPort());
-				sendMessage(sendPacket);
-			} catch (UnknownHostException e) {
-				System.err.println("UnknownHostException: could not determine IP address of host.");
-				e.printStackTrace();
-			}
-			blockID++;
-		}
-
-		//Final packet either empty (0) or remaining bytes, so this bit is to deal with sending one final DATA packet
-		ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
-		bytesToSend.write(0);
-		bytesToSend.write(OP_DATA);
-		bytesToSend.write((byte) (blockID & 0xFF));
-		bytesToSend.write((byte) ((blockID >> 8) & 0xFF));
-		//If there was exactly a multiple of 512 bytes, the final DATA packet will contain a 0 byte data section
-		if (numRemainder == 0) {
-			bytesToSend.write((0));
-		} else {
-			for (i = MAX_BLOCK_SIZE * numBlocks; i < bytesReadIn.length; i++) {
-				bytesToSend.write(bytesReadIn[i]);
-			}
-		}
-
-		try {
-			//TODO: Rename to createAndSendPacket(); (not ACK format though)
-			sendPacket(); //This used to send a packet but do nothing with it since the packet is created in the method anyway
-		} catch (IOException e) {
-			System.err.println("IOException: I/O error occured while sending message to client.");
-			e.printStackTrace();
-			System.exit(1);
-		}
-
-	}*/
-
-	/**
 	 * Acknowledges reception of server packet.
 	 * 
 	 * @param blockID byte array containing the block ID whose reception is acknowledged.
@@ -548,10 +454,19 @@ public class ServerSpawnThread implements Runnable {
 	private void acknowledge(byte[] blockID, DatagramSocket socket) {
 		byte[] ack = {0, OP_ACK, blockID[2], blockID[3]};
 		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, serverInetAddress, receivePacket.getPort());
+
+		//create socket if needed TODO: Convert to sendMessage()
+		if (socket == null) {
+			try {
+				socket = new DatagramSocket();
+			} catch (SocketException e) {
+				e.printStackTrace();
+			}
+		}
 		try {
 			socket.send(ACKDatagram);
 		} catch (IOException e) {
-			System.out.println("Server error while sending ACK to client");
+			System.err.println("Server error while sending ACK to client");
 			e.printStackTrace();
 			System.exit(1);
 		}		
@@ -571,18 +486,18 @@ public class ServerSpawnThread implements Runnable {
 	 * 
 	 * @throws InvalidMessageFormatException indicates that the received message is not a valid read/write command
 	 */
-	private void parseMessage() throws InvalidMessageFormatException{
+	private void parseMessage() throws InvalidMessageFormatException {
 		byte[] messageData = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
 
 		//check first byte
-		if(messageData[0] != 0)
+		if (messageData[0] != 0)
 			throw new InvalidMessageFormatException();
 
 		//check read/write byte
-		if(messageData[1] == OP_RRQ) {
+		if (messageData[1] == OP_RRQ) {
 			readRequest = true;
 			writeRequest = false;
-		} else if(messageData[1] == OP_WRQ) {
+		} else if (messageData[1] == OP_WRQ) {
 			readRequest = false;
 			writeRequest = true;
 		} else {
@@ -598,7 +513,7 @@ public class ServerSpawnThread implements Runnable {
 			 * & add text to byte array
 			 */
 			//NOTE: this does not allow for spaces (space represented by a zero byte)
-			for(;messageData[currentIndex] != 0; currentIndex++){
+			for (; messageData[currentIndex] != 0; currentIndex++) {
 				textStream.write(messageData[currentIndex]);
 			}
 			if (textStream.size() <= 0)
@@ -613,7 +528,7 @@ public class ServerSpawnThread implements Runnable {
 			//NOTE: this does not allow for spaces (space represented by a zero byte)
 			textStream.reset();
 
-			for(currentIndex++; messageData[currentIndex] != 0; currentIndex++){
+			for (currentIndex++; messageData[currentIndex] != 0; currentIndex++) {
 				textStream.write(messageData[currentIndex]);
 			}
 
@@ -627,40 +542,17 @@ public class ServerSpawnThread implements Runnable {
 			if (!mode.equals("netascii") && !mode.equals("octet"))
 				throw new InvalidMessageFormatException("Invalid Mode");
 
-		} catch (IndexOutOfBoundsException e){
+		} catch (IndexOutOfBoundsException e) {
 			/*if we go out of bounds while iterating through the message data,
 			 * then it does not end in a 0 and thus is incorrect format
 			 */
 			throw new InvalidMessageFormatException("Reached End Of Packet");
 		}
 		//check that this is the end of the message
-		if(currentIndex + 1 != messageData.length){
+		if (currentIndex + 1 != messageData.length) {
 			throw new InvalidMessageFormatException("Reached \"End\" Of Packet But There Is More");
 		}
 	}
-
-	/*
-	 * Wrapper for sendMessage().
-	 * Sends a datagram through the server's sendSocket
-	 *
-	 * @throws IOException indicates and I/O error occurred while sending a message
-	 */
-	/*private void sendPacket() throws IOException {
-		 *//*
-		 * Create & Send Packet
-		 *//*
-		byte[] responseData = this.createPacketData();
-
-		DatagramPacket sendPacket = new DatagramPacket(responseData, responseData.length,
-				InetAddress.getLocalHost(), clientPort);
-
-		System.out.print("Server Response: \nTo ");
-		printPacketInfo(sendPacket);
-
-		sendMessage(sendPacket);
-
-		System.out.println("Server response sent");
-	}*/
 
 	/**
 	 * formats a message as a response to the appropriate request
