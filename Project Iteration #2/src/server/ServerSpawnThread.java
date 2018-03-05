@@ -4,7 +4,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.SyncFailedException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -36,6 +35,10 @@ public class ServerSpawnThread implements Runnable {
 	private String mode;
 	//reference to the server object to use as a lock
 	private Server server;
+	//Error flag indicating something went wrong and an ACK should not be sent
+	private boolean noErrors = true;
+	//Last block number received
+	int lastBlockNum;
 
 	//port number of client to send response to
 	private int clientPort;
@@ -112,7 +115,7 @@ public class ServerSpawnThread implements Runnable {
 				e.printStackTrace();
 				System.out.println("Invalid message Contents:");
 				printPacketInfo(receivePacket);
-			}         
+			}
 			server.messageProcessed();
 		}
 		System.out.println("server message processing thread finished.");
@@ -125,7 +128,8 @@ public class ServerSpawnThread implements Runnable {
 	 */
 	private void readRequest(String fileName){
 		//read in the specified file
-		byte[] fileData = readFile("SERVERDATA/" + fileName);
+		byte[] fileData; //fileData may be null
+		fileData = readFile("SERVERDATA/" + fileName);
 		System.out.println("Reading file named " + fileName);
 		String fileText = new String(fileData);
 		System.out.println("File to send:\n" + fileText);
@@ -140,7 +144,8 @@ public class ServerSpawnThread implements Runnable {
 	 * @param fileText the file data to send
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 */
-	public void sendData(String fileText){
+	private void sendData(String fileText){
+		System.out.println("USING sendData FOR FILE TRANSFER");
 		//split file text into chunks for transfer
 		byte[][] fileData = splitByteArray(fileText.getBytes());
 
@@ -155,7 +160,7 @@ public class ServerSpawnThread implements Runnable {
 		}
 
 		/*transfer file to client*/
-		DatagramPacket response = null;
+		DatagramPacket response;
 		int blockNumberInt = 0;
 		int blockNumber = 0;
 		byte[] serverResponseData, ACKData;
@@ -210,19 +215,19 @@ public class ServerSpawnThread implements Runnable {
 			//extract ACK data
 			ACKDatagram = receivePacket;
 			ACKData = ACKDatagram.getData();
-			int recievedBlockNumber = extractBlockNumber(ACKData);
+			int receivedBlockNumber = extractBlockNumber(ACKData);
 
 			//print information in message received
 			System.out.println("Server: recieved packet");
 			printPacketInfo(ACKDatagram);
 
-			//ensure we got an ACK repsponse
+			//ensure we got an ACK response
 			if(ACKDatagram.getData()[1] != OP_ACK){
 				System.out.println("Error: expected ACK, received unknown message.");
 				return;
 			}
 			//ensure we got an ACK matching the block number sent
-			if(recievedBlockNumber != blockNumber){
+			if(receivedBlockNumber != blockNumber){
 				System.out.println("Error: ACK block number does not match sent block number.");
 				return;
 			}
@@ -286,9 +291,8 @@ public class ServerSpawnThread implements Runnable {
 	/**
 	 * Writes data to file
 	 * 
-	 * @param filename name of the new file to write to
-	 * @param file contents byte array of data blocks received to write into file.
-	 * @author Joe Frederick Samuel, Luke Newton
+	 * @param fileName name of the new file to write to
+	 * @author Joe Frederick Samuel, Luke Newton, CRushton
 	 */
 	private void writeFile(String fileName) {
 		fileName = "SERVERDATA/" + fileName;
@@ -307,40 +311,37 @@ public class ServerSpawnThread implements Runnable {
 				System.err.println("Failed creating/sending error packet");
 				e.printStackTrace();
 			}
-		}
-		else {
-		try {
-			FileOutputStream fileWriter = new FileOutputStream(fileName); //fileName also includes path. Default path is project folder (may differ from machine to machine)
-			fileWriter.write(fileContents);
-			fileWriter.close();
-		} catch (SyncFailedException err) {
+		} else {
+			try {
+				FileOutputStream fileWriter = new FileOutputStream(fileName); //fileName also includes path. Default path is project folder (may differ from machine to machine)
+				fileWriter.write(fileContents);
+				fileWriter.close();
 			
-			//send error packet
-			
-			//Thread should terminate on it's own once above is complete
-			
-		} catch (IOException e) {
-			System.err.println("Failed to write the file.");
-			if (e.getMessage().equals("There is not enough space on the disk")) { //create and send error code 3 packet
+			} catch (IOException e) {
+				System.err.println("Failed to write the file.");
+				if (e.getMessage().equals("There is not enough space on the disk")) { //create and send error code 3 packet
+					try {
+						createAndSendErrorPacket(DISK_FULL_CODE, "Failed to write file - disk full.");
+					} catch (IOException er) {
+						System.err.println("Failed creating/sending error packet");
+						er.printStackTrace();
+					}
+				}
+				e.printStackTrace();
+
+			} catch (SecurityException se) {
+				System.out.println("Access violation while trying to read file from server.");
 				try {
-					createAndSendErrorPacket(DISK_FULL_CODE, "Failed to write file - disk full.");
+					createAndSendErrorPacket(ACCESS_VIOLATION_CODE, "Failed access file - Access Violation.");
 				} catch (IOException er) {
 					System.err.println("Failed creating/sending error packet");
 					er.printStackTrace();
 				}
 			}
-			e.printStackTrace();
-			//System.exit(1);
-		}	catch (SecurityException se) {
-			System.out.println("Access violation while trying to read file from server.");
-			try {
-				createAndSendErrorPacket(ACCESS_VIOLATION_CODE, "Failed access file - Access Violation.");
-			} catch (IOException er) {
-				System.err.println("Failed creating/sending error packet");
-				er.printStackTrace();
-			}
 		}
-		}
+		//writing file is successful, send ACK
+		if (noErrors)
+			acknowledge(intToByteArray(lastBlockNum), sendSocket);
 	}
 	
 	/**
@@ -351,7 +352,7 @@ public class ServerSpawnThread implements Runnable {
 	 * @author Joe Frederick Samuel, Luke Newton
 	 * @return the file retrieved from the server as a byte array
 	 */
-	public byte[] receiveFile(){
+	protected byte[] receiveFile(){
 		//store the packets received from the server
 		DatagramPacket response = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
 		//the size of the message received from the server
@@ -372,17 +373,20 @@ public class ServerSpawnThread implements Runnable {
 			System.exit(1);
 		}
 		do {
-			//send acknowledgement to client
-			acknowledge(intToByteArray(blockNumber), sendReceiveSocket);
+			//send acknowledgement to client. It should be determined after writing the file successfully whether an ACK should be sent or an error
+			if (noErrors && !(response.getLength() < MAX_PACKET_SIZE))
+				acknowledge(intToByteArray(blockNumber), sendReceiveSocket);
 			
-			if(response != null && response.getLength() < MAX_PACKET_SIZE)
+			if(response.getLength() < MAX_PACKET_SIZE) {
+				lastBlockNum = blockNumber;
 				break;
+			}
 				
-			//recieve server message
+			//receive client message
 			try {
 				sendReceiveSocket.receive(response);
 			} catch (IOException e) {
-				System.out.println("I/O EXception while receiving message");
+				System.out.println("I/O Exception while receiving message");
 				e.printStackTrace();
 				System.exit(1);
 			}
@@ -398,7 +402,7 @@ public class ServerSpawnThread implements Runnable {
 
 			//if we did not get a DATA packet, exit
 			if(serverResponseData[1] != OP_DATA){
-				System.out.println("Error during file read: unexpected packet format.");
+				System.err.println("Error during file read: unexpected packet format.");
 				return null;
 			}
 
@@ -408,7 +412,7 @@ public class ServerSpawnThread implements Runnable {
 			//add response data to buffer (index 4 is the start of data in TFTP DATA packets)
 			for(int i = 4; i < messageSize; i++)
 				responseBuffer.add(serverResponseData[i]);
-		}while(true);
+		} while(true);
 
 		/*get final byte array from response buffer*/
 		ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
@@ -426,7 +430,7 @@ public class ServerSpawnThread implements Runnable {
 	 * @return contents of the file read in
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton, Kevin Sun
 	 */
-	public byte[] readFile(String filename) {
+	private byte[] readFile(String filename) {
 		Path path = Paths.get(filename);
 		try {
 			return Files.readAllBytes(path);
@@ -452,15 +456,15 @@ public class ServerSpawnThread implements Runnable {
 		}
 	}
 
-	/**
+	/*
 	 * Sends the contents of the file, packet by packet, waiting for an acknowledgment to be returned before continuing to the next packet.
-	 * 
+	 *
 	 * @param bytesReadIn an array of bytes containing the contents of the file to be sent
 	 * @author Joe Frederick Samuel, Ryan Ribeiro
 	 */
-	public void sendFile(byte[] bytesReadIn) {
+	/*protected void sendFile(byte[] bytesReadIn) {
 		//loop control variables
-		int i = 0, j = 0;
+		int i, j;
 		//First block starts with an ID of 1
 		int blockID = 1;
 
@@ -485,7 +489,7 @@ public class ServerSpawnThread implements Runnable {
 				System.err.println("IOException: I/O error occured while server waiting to recieve message");
 				e.printStackTrace();
 				System.exit(1);
-			}		
+			}
 			//ByteArrayOutputStream used to create a stream of bytes that will be sent in 516 byte DATA packets
 			ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
 			bytesToSend.write(0);
@@ -507,7 +511,7 @@ public class ServerSpawnThread implements Runnable {
 				e.printStackTrace();
 			}
 			blockID++;
-		}	
+		}
 
 		//Final packet either empty (0) or remaining bytes, so this bit is to deal with sending one final DATA packet
 		ByteArrayOutputStream bytesToSend = new ByteArrayOutputStream();
@@ -523,22 +527,17 @@ public class ServerSpawnThread implements Runnable {
 				bytesToSend.write(bytesReadIn[i]);
 			}
 		}
-		//byte[] data = bytesToSend.toByteArray();
-		//try {
-			//DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getLocalHost(), server.getClientPort());
-			try {
-				//TODO: Rename to createAndSendPacket(); (not ACK format though)
-				sendPacket(); //This used to send a packet but do nothing with it since the packet is created in the method anyway
-			} catch (IOException e) {
-				System.err.println("IOException: I/O error occured while sending message to client.");
-				e.printStackTrace();
-				System.exit(1);
-			}
-		//} catch (UnknownHostException e) {
-			//System.err.println("UnknownHostException: could not determine IP address of host.");
-			//e.printStackTrace();
-		//}
-	}
+
+		try {
+			//TODO: Rename to createAndSendPacket(); (not ACK format though)
+			sendPacket(); //This used to send a packet but do nothing with it since the packet is created in the method anyway
+		} catch (IOException e) {
+			System.err.println("IOException: I/O error occured while sending message to client.");
+			e.printStackTrace();
+			System.exit(1);
+		}
+
+	}*/
 
 	/**
 	 * Acknowledges reception of server packet.
@@ -594,10 +593,10 @@ public class ServerSpawnThread implements Runnable {
 		//store names of file and mode in a stream
 		ByteArrayOutputStream textStream = new ByteArrayOutputStream();
 		try {
-			/******************************************
-			 * Check for some text followed by a zero *
-			 * & add text to byte array               *
-			 *****************************************/
+			/*
+			 * Check for some text followed by a zero
+			 * & add text to byte array
+			 */
 			//NOTE: this does not allow for spaces (space represented by a zero byte)
 			for(;messageData[currentIndex] != 0; currentIndex++){
 				textStream.write(messageData[currentIndex]);
@@ -608,9 +607,9 @@ public class ServerSpawnThread implements Runnable {
 			//Convert file name to byte array
 			fileName = textStream.toString();
 
-			/***********************************************
-			 * Check for some more text followed by a zero *
-			 ***********************************************/
+			/*
+			 * Check for some more text followed by a zero
+			 */
 			//NOTE: this does not allow for spaces (space represented by a zero byte)
 			textStream.reset();
 
@@ -640,18 +639,16 @@ public class ServerSpawnThread implements Runnable {
 		}
 	}
 
-	/**
+	/*
 	 * Wrapper for sendMessage().
 	 * Sends a datagram through the server's sendSocket
-	 * 
-	 * @param packet the datagram packet to send
+	 *
 	 * @throws IOException indicates and I/O error occurred while sending a message
-	 * @throws UnknownHostException thrown if unable to determine the local IP address
 	 */
-	public void sendPacket() throws UnknownHostException, IOException {
-		 /***********************
-		 * Create & Send Packet *
-		 ***********************/
+	/*private void sendPacket() throws IOException {
+		 *//*
+		 * Create & Send Packet
+		 *//*
 		byte[] responseData = this.createPacketData();
 
 		DatagramPacket sendPacket = new DatagramPacket(responseData, responseData.length,
@@ -663,7 +660,7 @@ public class ServerSpawnThread implements Runnable {
 		sendMessage(sendPacket);
 
 		System.out.println("Server response sent");
-	}
+	}*/
 
 	/**
 	 * formats a message as a response to the appropriate request
@@ -671,7 +668,7 @@ public class ServerSpawnThread implements Runnable {
 	 * 
 	 * @return the message converted into a byte array with proper format
 	 */
-	public byte[] createPacketData() {
+	protected byte[] createPacketData() {
 		ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
 
 		byteStream.write(0);
@@ -711,24 +708,25 @@ public class ServerSpawnThread implements Runnable {
 	/**
 	 * Creates and sends an error packet on the port that is being serviced.
 	 * @author Cameron Rushton
-	 * @param errorCode
-	 * @param msg
+	 * @param errorCode A number indicating the TFTP error code number
+	 * @param msg The message that is displayed to the user
 	 * @throws IOException
 	 */
-	public void createAndSendErrorPacket(byte errorCode, String msg) throws IOException {
-		 /*************************
-		 * Check for input errors *
-		 *************************/
-		if (errorCode < 1 || errorCode > 6) {
+	private void createAndSendErrorPacket(byte errorCode, String msg) throws IOException {
+		noErrors = false;
+		/*
+		 * Check for input errors
+		 */
+		if (errorCode < 0 || errorCode > 7) {
 			System.err.println("Unexpected error code given. Error packet not sent.");
 			
 		} else if (msg == null) {
 			System.err.println("Error message is null. Error packet not sent.");
 			
 		} else {
-		 /*********************************
-		 * Construct error message & send *
-		 *********************************/
+		 /*
+		 * Construct error message & send
+		 */
 			ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
 			
 			byteStream.write(0);
@@ -754,7 +752,7 @@ public class ServerSpawnThread implements Runnable {
 	 * @author Luke Newton, Cameron Rushton
 	 * @param packet : DatagramPacket
 	 */
-	public void printPacketInfo(DatagramPacket packet) {
+	private void printPacketInfo(DatagramPacket packet) {
 		//get meaningful portion of message
 		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());		
 

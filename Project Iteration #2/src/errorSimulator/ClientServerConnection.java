@@ -35,7 +35,7 @@ public class ClientServerConnection implements Runnable {
 
 	private ErrorSimulator errorSim;
 
-	DatagramPacket request;
+	private DatagramPacket request;
 
 	//TFTP OP code
 	private static final byte OP_RRQ = 1;
@@ -48,10 +48,10 @@ public class ClientServerConnection implements Runnable {
 	 * Constructor
 	 * 
 	 * @author Luke Newton
-	 * @param request the intial request from the client which prompts a connection
+	 * @param request the initial request from the client which prompts a connection
 	 * @param errorSim reference to main error simulator to use as lock
 	 */
-	public ClientServerConnection(DatagramPacket request, ErrorSimulator errorSim) {
+	ClientServerConnection(DatagramPacket request, ErrorSimulator errorSim) {
 		this.request = new DatagramPacket(request.getData(), request.getLength(),
 				request.getAddress(), request.getPort());
 		try {
@@ -68,14 +68,14 @@ public class ClientServerConnection implements Runnable {
 	 * @author Luke Newton, Cameron Rushton
 	 * @param packet : DatagramPacket
 	 */
-	public void printPacketInfo(DatagramPacket packet) {
+	private void printPacketInfo(DatagramPacket packet) {
 		//get meaningful portion of message
 		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());		
 
 		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
 		System.out.println("Message length: " + packet.getLength());
 		System.out.println("Containing: " + new String(dataAsByteArray));
-		System.out.println("Conents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
+		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
 	}
 
 	/**
@@ -85,7 +85,7 @@ public class ClientServerConnection implements Runnable {
 	 * @throws IOException indicated an I/O error has occurred
 	 * @return returns the receive datagram packet
 	 */
-	public DatagramPacket waitRecieveServerMessage() throws IOException{
+	private DatagramPacket waitReceiveServerMessage() throws IOException{
 		recievePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
 		sendRecieveSocket.receive(recievePacket);
 		return recievePacket;
@@ -151,7 +151,7 @@ public class ClientServerConnection implements Runnable {
 				serverResponse = null;
 				try {
 					System.out.println("Error simulator waiting on response from server...");
-					serverResponse = waitRecieveServerMessage();
+					serverResponse = waitReceiveServerMessage();
 				} catch (IOException e) {
 					System.err.println("IOException: I/O error occured while error simulator waiting for response");
 					e.printStackTrace();
@@ -202,7 +202,7 @@ public class ClientServerConnection implements Runnable {
 				clientResponse = null;
 				try {
 					System.out.println("Error simulator waiting on response from client...");
-					clientResponse = waitRecieveServerMessage();
+					clientResponse = waitReceiveServerMessage();
 				} catch (IOException e) {
 					System.err.println("IOException: I/O error occured while error simulator waiting for response");
 					e.printStackTrace();

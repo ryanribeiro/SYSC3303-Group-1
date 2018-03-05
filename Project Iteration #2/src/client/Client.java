@@ -62,7 +62,7 @@ public class Client {
 			receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
 			serverInetAddress = InetAddress.getByName(TFTP_SERVER_IP);
 		} catch (UnknownHostException e) {
-			System.out.println("Failed to initalize TFTP Server IP");
+			System.out.println("Failed to initialize TFTP Server IP");
 			e.printStackTrace();
 			System.exit(1);
 		}
@@ -77,8 +77,8 @@ public class Client {
 	/**
 	 * Writes data to file
 	 * 
-	 * @param filename name of the new file to write to
-	 * @param file contents byte array of data blocks received to write into file.
+	 * @param fileName name of the new file to write to
+	 * @param fileContents contents byte array of data blocks received to write into file.
 	 * @author Joe Frederick Samuel, Luke Newton
 	 */
 	private void writeFile(String fileName, byte[] fileContents) {
@@ -134,16 +134,6 @@ public class Client {
 	}
 
 	/**
-	 *return the data in the datagram packet received
-	 *
-	 * @author Luke Newton
-	 * @return  the data in the datagram packet received
-	 */
-	public byte[] getRecievePacketData(){
-		return receivePacket.getData();
-	}
-
-	/**
 	 * formats a message passed to contain the predefined format for a read request
 	 * 
 	 * @author Luke Newton, Joe Frederick Samuel
@@ -152,7 +142,7 @@ public class Client {
 	 * @param OP_Code type a OP_Code for the type of request to send
 	 * @return the message converted into a byte array with proper format
 	 */
-	public static byte[] createPacketData(String filename, String mode, byte OP_Code) {
+	private static byte[] createPacketData(String filename, String mode, byte OP_Code) {
 		ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
 
 		byteStream.write(0);
@@ -167,7 +157,7 @@ public class Client {
 	}
 
 	/**
-	 * sends a datagram through the intermediate host's sendRecieveSocket
+	 * sends a datagram through the intermediate host's sendReceiveSocket
 	 * @author Luke Newton
 	 * 
 	 * @param message	the datagram packet to send
@@ -176,7 +166,7 @@ public class Client {
 		try {
 			sendReceiveSocket.send(message);
 		} catch (IOException e) {
-			System.out.println("IOException: I/O error occured while client sending message");
+			System.out.println("IOException: I/O error occurred while client sending message");
 			e.printStackTrace();
 			System.exit(1);
 		}
@@ -188,12 +178,12 @@ public class Client {
 	 * @author Luke Newton
 	 * @return returns the receive datagram packet
 	 */
-	public DatagramPacket waitReceiveMessage(){
+	private DatagramPacket waitReceiveMessage(){
 		receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
 		try {
 			sendReceiveSocket.receive(receivePacket);
 		} catch (IOException e) {
-			System.out.println("IOException: I/O error occured while client waiting for message");
+			System.out.println("IOException: I/O error occurred while client waiting for message");
 			e.printStackTrace();
 			System.exit(1);
 		}
@@ -206,7 +196,7 @@ public class Client {
 	 * @author Luke Newton, Cameron Rushton
 	 * @param packet DatagramPacket
 	 */
-	public void printPacketInfo(DatagramPacket packet) {
+	private void printPacketInfo(DatagramPacket packet) {
 		//get meaningful portion of message
 		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());		
 
@@ -294,7 +284,7 @@ public class Client {
 	 * @param filename the name of the file to read from the server
 	 * @return the file data read from the server
 	 */
-	public byte[] readRequest(String filename){
+	private byte[] readRequest(String filename){
 		//create RRQ data
 		byte[] RRQData = createPacketData(filename, MODE, OP_RRQ);
 		//create RRQ
@@ -319,7 +309,7 @@ public class Client {
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 * @param filename the name of the file being written to the server
 	 */
-	public void writeRequest(String filename){
+	private void writeRequest(String filename){
 		//create WRQ data
 		byte[] WRQData = createPacketData(filename, MODE, OP_WRQ);
 		//create RRQ
@@ -349,7 +339,7 @@ public class Client {
 	 * @param fileText the text to send in the file
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 */
-	public void sendData(String fileText){
+	private void sendData(String fileText){
 		//split file text into chunks for transfer
 		byte[][] fileData = splitByteArray(fileText.getBytes());
 
@@ -372,7 +362,7 @@ public class Client {
 			//extract ACK data
 			ACKDatagram = receivePacket;
 			ACKData = ACKDatagram.getData();
-			int recievedBlockNumber = extractBlockNumber(ACKData);
+			int receivedBlockNumber = extractBlockNumber(ACKData);
 			int serverPort = ACKDatagram.getPort();
 			
 			//print information in message received
@@ -383,10 +373,10 @@ public class Client {
 			if(ACKDatagram.getData()[1] != OP_ACK){
 				//Checks if it was an error packet
 				if (ACKDatagram.getData()[1] == OP_ERROR) {
-					int i = 0;
+
 					ByteArrayOutputStream textStream = new ByteArrayOutputStream();
 					//Retrieves the error message sent in the packet
-					for (i = 4; ACKDatagram.getData()[i] != 0; i++) {
+					for (int i = 4; ACKDatagram.getData()[i] != 0; i++) {
 						textStream.write(ACKDatagram.getData()[i]);
 					}
 					String errorMessage = textStream.toString();
@@ -397,7 +387,7 @@ public class Client {
 				return;
 			}
 			//ensure we got an ACK matching the block number sent
-			if(recievedBlockNumber != blockNumber){
+			if(receivedBlockNumber != blockNumber){
 				System.out.println("Error: ACK block number does not match sent block number.");
 				return;
 			}
@@ -498,9 +488,9 @@ public class Client {
 	 * @author Joe Frederick Samuel, Luke Newton
 	 * @return the file retrieved from the server as a byte array
 	 */
-	public byte[] receiveFile(){
+	protected byte[] receiveFile(){
 		//store the packets received from the server
-		DatagramPacket response = null;
+		DatagramPacket response;
 		//the size of the message received from the server
 		int messageSize;
 		//current block number of DATA
@@ -554,7 +544,7 @@ public class Client {
 	 * @return contents of the file read in
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 */
-	public byte[] readFile(String filename) {
+	private byte[] readFile(String filename) {
 		Path path = Paths.get(filename);
 		try {
 			return Files.readAllBytes(path);
