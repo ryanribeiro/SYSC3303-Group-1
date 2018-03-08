@@ -103,6 +103,7 @@ public class Client {
 	private void acknowledge(byte[] blockID) {
 		byte[] ack = {0, OP_ACK, blockID[2], blockID[3]};
 		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, serverInetAddress, receivePacket.getPort());
+
 		sendMessage(ACKDatagram);
 		System.out.println("sent acknowledgement to server");
 	}
@@ -126,7 +127,7 @@ public class Client {
 	 *
 	 * @author Luke Newton
 	 */
-	public void closeClientSocket() {
+	private void closeClientSocket() {
 		sendReceiveSocket.close();
 	}
 
@@ -159,7 +160,7 @@ public class Client {
 	 *
 	 * @param message	the datagram packet to send
 	 */
-	public void sendMessage(DatagramPacket message){
+	private void sendMessage(DatagramPacket message){
 		try {
 			sendReceiveSocket.send(message);
 		} catch (IOException e) {
@@ -167,6 +168,8 @@ public class Client {
 			e.printStackTrace();
 			System.exit(1);
 		}
+		System.out.print("Sending packet \nTo: ");
+		printPacketInfo(message);
 		lastPacketSent = message;
 	}
 
@@ -271,13 +274,8 @@ public class Client {
 		DatagramPacket RRQDatagram = new DatagramPacket(RRQData, RRQData.length,
 				serverInetAddress, INTERMEDIATE_HOST_PORT_NUMBER);
 
-		//print information in message to send
-		System.out.println("Client: sending packet");
-		printPacketInfo(RRQDatagram);
-
 		//send RRQ
 		sendMessage(RRQDatagram);
-		System.out.println("Client: packet sent");
 
 		//get server response
 		return receiveFile();
@@ -296,13 +294,8 @@ public class Client {
 		DatagramPacket WRQDatagram = new DatagramPacket(WRQData, WRQData.length,
 				serverInetAddress, INTERMEDIATE_HOST_PORT_NUMBER);
 
-		//print information in message to send
-		System.out.println("\nClient: sending packet");
-		printPacketInfo(WRQDatagram);
-
 		//send WRQ
 		sendMessage(WRQDatagram);
-		System.out.println("Client: packet sent");
 
 		//read in the specified file
 		byte[] fileData = readFile(filename);
@@ -329,9 +322,10 @@ public class Client {
 		int blockNumber = 0;
 		int serverPort = 0;
 		byte[] serverResponseData, ACKData;
-		boolean keepReceiving = true;
+		boolean keepReceiving;
 		//get ACK packet
 		do {
+			keepReceiving = true;
 			while (keepReceiving) { //received a packet, but packet was found not valid
 				while (keepReceiving) { //did not receive a packet
 					try {
@@ -388,13 +382,8 @@ public class Client {
 			response = new DatagramPacket(serverResponseData, serverResponseData.length,
 					serverInetAddress, serverPort);
 
-			//print information in message to send
-			System.out.println("Client: sending packet");
-			printPacketInfo(response);
-
 			//send datagram
 			sendMessage(response);
-			System.out.println("Client: packet sent");
 
 		}while(true);
 	}
@@ -490,54 +479,57 @@ public class Client {
 	 * @author Joe Frederick Samuel, Luke Newton, CRushton
 	 * @return the file retrieved from the server as a byte array
 	 */
-	protected byte[] receiveFile(){
+	private byte[] receiveFile(){
 		//store the packets received from the server
 		//DatagramPacket response;
 		//the size of the message received from the server
-		int messageSize;
+		int messageSize = 0;
 		//current block number of DATA
 		int blockNumber = 0;
 		//the data contained in the response datagram
-		byte[] serverResponseData;
+		byte[] serverResponseData = {};
 		//buffer to store what has been received so far
 		List<Byte> responseBuffer = new ArrayList<>();
 
-		boolean keepReceiving = true;
-		do { //TODO: Handle incorrect packet type received. Keep receiving?
-			while (keepReceiving) { //if timed out, send last packet sent and try receiving again
-				//receive server message
-				receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
-				try {
-					sendReceiveSocket.receive(receivePacket);
-					keepReceiving = false;
-				} catch (SocketTimeoutException er) {
-					if (blockNumber == 0) { //if we need to send another RRQ
-						sendMessage(lastPacketSent);
-					} else { //send last ACK
-						acknowledge(intToByteArray(blockNumber));
+		boolean keepReceiving;
+		do {
+			keepReceiving = true; //new packet to receive, reset to true
+			while (keepReceiving) { //Received packet, but was incorrect format. Dont send ACK & Try to receive again
+				while (keepReceiving) { //if timed out, send last packet sent and try receiving again
+					//receive server message
+					receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
+					try {
+						sendReceiveSocket.receive(receivePacket);
+						keepReceiving = false;
+					} catch (SocketTimeoutException er) {
+						System.err.println("Timed out, waiting on another packet.");
+						if (blockNumber == 0) { //if we need to send another RRQ
+							sendMessage(lastPacketSent);
+						} else { //send last ACK
+							acknowledge(intToByteArray(blockNumber));
+						}
+					} catch (IOException e) {
+						System.out.println("IOException: I/O error occurred while client waiting for message");
+						e.printStackTrace();
+						System.exit(1);
 					}
-				} catch (IOException e) {
-					System.out.println("IOException: I/O error occurred while client waiting for message");
-					e.printStackTrace();
-					System.exit(1);
+				}
+
+				//print information in message received
+				System.out.println("Client: received packet");
+				printPacketInfo(receivePacket);
+
+				//get size of the message
+				messageSize = receivePacket.getLength();
+				//get response datagram data
+				serverResponseData = receivePacket.getData();
+
+				//if we did not get a DATA packet, keep receiving
+				if (serverResponseData[1] != OP_DATA) {
+					System.err.println("Error during file read: unexpected packet format.");
+					keepReceiving = true;
 				}
 			}
-
-			//print information in message to send
-			System.out.println("Client: received packet");
-			printPacketInfo(receivePacket);
-
-			//get size of the message
-			messageSize = receivePacket.getLength();
-			//get response datagram data
-			serverResponseData = receivePacket.getData();
-
-			//if we did not get a DATA packet, exit
-			if(serverResponseData[1] != OP_DATA){
-				System.err.println("Error during file read: unexpected packet format.");
-				return null;
-			}
-
 			//get block number
 			blockNumber = extractBlockNumber(serverResponseData);
 
