@@ -1,10 +1,6 @@
 package client;
 
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.DatagramPacket;
-import java.net.SocketException;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,7 +15,7 @@ import java.util.Scanner;
 
 /**
  * a class representing the client for the server-client-intermediate host system. has
- * Capability to send and receive messages to and from the intermediate host, 
+ * Capability to send and receive messages to and from the intermediate host,
  * and format read/write requests
  */
 public class Client {
@@ -51,13 +47,14 @@ public class Client {
 	private DatagramSocket sendReceiveSocket;
 	//place to store response from intermediate host
 	private DatagramPacket receivePacket;
+	//the last packet sent out
+	private DatagramPacket lastPacketSent;
 
 	/**Constructor
 	 * @throws SocketException indicates failed to create socket for client
 	 * @author Luke Newton
 	 * */
 	public Client() throws SocketException {
-		//TFTP
 		try {
 			receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
 			serverInetAddress = InetAddress.getByName(TFTP_SERVER_IP);
@@ -76,7 +73,7 @@ public class Client {
 
 	/**
 	 * Writes data to file
-	 * 
+	 *
 	 * @param fileName name of the new file to write to
 	 * @param fileContents contents byte array of data blocks received to write into file.
 	 * @author Joe Frederick Samuel, Luke Newton
@@ -94,26 +91,26 @@ public class Client {
 			System.out.println("Access violation while trying to write file from server.");
 			se.printStackTrace();
 			System.exit(1);
-		}		
+		}
 	}
 
 	/**
 	 * Acknowledges reception of server packet.
-	 * 
+	 *
 	 * @param blockID byte array containing the block ID whose reception is acknowledged.
 	 * @author Joe Frederick Samuel
 	 */
 	private void acknowledge(byte[] blockID) {
 		byte[] ack = {0, OP_ACK, blockID[2], blockID[3]};
 		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, serverInetAddress, receivePacket.getPort());
-		sendMessage(ACKDatagram);		
+		sendMessage(ACKDatagram);
 		System.out.println("sent acknowledgement to server");
 	}
 
 
 	/**
 	 * Checks if the packet received is the last packet for transmission
-	 * 
+	 *
 	 * @param receivedPacket the packet received from the server
 	 * @return boolean	true if last packet, false otherwise.
 	 * @author Joe Frederick Samuel
@@ -126,7 +123,7 @@ public class Client {
 
 	/**
 	 * closes the socket for the client
-	 * 
+	 *
 	 * @author Luke Newton
 	 */
 	public void closeClientSocket() {
@@ -135,7 +132,7 @@ public class Client {
 
 	/**
 	 * formats a message passed to contain the predefined format for a read request
-	 * 
+	 *
 	 * @author Luke Newton, Joe Frederick Samuel
 	 * @param filename filename to send with the read request
 	 * @param mode the mode to send with the read request
@@ -159,7 +156,7 @@ public class Client {
 	/**
 	 * sends a datagram through the intermediate host's sendReceiveSocket
 	 * @author Luke Newton
-	 * 
+	 *
 	 * @param message	the datagram packet to send
 	 */
 	public void sendMessage(DatagramPacket message){
@@ -170,35 +167,18 @@ public class Client {
 			e.printStackTrace();
 			System.exit(1);
 		}
-	}
-
-	/**
-	 * client waits until it receives a message, which is stored in receivePacket and returned
-	 * 
-	 * @author Luke Newton
-	 * @return returns the receive datagram packet
-	 */
-	private DatagramPacket waitReceiveMessage(){
-		receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
-		try {
-			sendReceiveSocket.receive(receivePacket);
-		} catch (IOException e) {
-			System.out.println("IOException: I/O error occurred while client waiting for message");
-			e.printStackTrace();
-			System.exit(1);
-		}
-		return receivePacket;
+		lastPacketSent = message;
 	}
 
 	/**
 	 * prints packet information
-	 * 
+	 *
 	 * @author Luke Newton, Cameron Rushton
 	 * @param packet DatagramPacket
 	 */
 	private void printPacketInfo(DatagramPacket packet) {
 		//get meaningful portion of message
-		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());		
+		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());
 
 		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
 		System.out.println("Message length: " + packet.getLength());
@@ -208,7 +188,7 @@ public class Client {
 
 	/**
 	 * main program for client program
-	 *  
+	 *
 	 * @author Luke Newton
 	 * @param args
 	 */
@@ -234,7 +214,7 @@ public class Client {
 		while(!command.equalsIgnoreCase("quit")){
 			System.out.print("Command: ");
 
-			/*recieve user input*/
+			/*receive user input*/
 			input = scanner.nextLine().split(" ");
 			command = input[0];
 			try{
@@ -251,7 +231,7 @@ public class Client {
 				byte[] file = client.readRequest(filename);
 
 				if(file != null){
-					//print the retrieved file
+					//print the retreived file
 					System.out.println("File read from server:");
 					System.out.println(new String(file));
 
@@ -268,7 +248,7 @@ public class Client {
 			else if(command.equalsIgnoreCase("help"))
 				client.printHelpMenu();
 			else if(input.length > 2)
-				System.out.println("Invalid command! Too many arguements.");
+				System.out.println("Invalid command! Too many arguments.");
 			else
 				System.out.println("Invalid command! Type 'help' to check available commands and remember to provide a file name if required");
 		}
@@ -279,7 +259,7 @@ public class Client {
 
 	/**
 	 * performs a file read from the server
-	 * 
+	 *
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 * @param filename the name of the file to read from the server
 	 * @return the file data read from the server
@@ -288,7 +268,7 @@ public class Client {
 		//create RRQ data
 		byte[] RRQData = createPacketData(filename, MODE, OP_RRQ);
 		//create RRQ
-		DatagramPacket RRQDatagram = new DatagramPacket(RRQData, RRQData.length, 
+		DatagramPacket RRQDatagram = new DatagramPacket(RRQData, RRQData.length,
 				serverInetAddress, INTERMEDIATE_HOST_PORT_NUMBER);
 
 		//print information in message to send
@@ -305,22 +285,22 @@ public class Client {
 
 	/**
 	 * performs a file write to the server
-	 * 
+	 *
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 * @param filename the name of the file being written to the server
 	 */
 	private void writeRequest(String filename){
 		//create WRQ data
 		byte[] WRQData = createPacketData(filename, MODE, OP_WRQ);
-		//create RRQ
-		DatagramPacket WRQDatagram = new DatagramPacket(WRQData, WRQData.length, 
+		//create WRQ
+		DatagramPacket WRQDatagram = new DatagramPacket(WRQData, WRQData.length,
 				serverInetAddress, INTERMEDIATE_HOST_PORT_NUMBER);
 
 		//print information in message to send
 		System.out.println("\nClient: sending packet");
 		printPacketInfo(WRQDatagram);
 
-		//send RRQ
+		//send WRQ
 		sendMessage(WRQDatagram);
 		System.out.println("Client: packet sent");
 
@@ -334,10 +314,10 @@ public class Client {
 	}
 
 	/**
-	 * Sends the contents of a file to the server.
-	 * 
+	 * Sends the contents of a file to the server during a write request.
+	 *
 	 * @param fileText the text to send in the file
-	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
+	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton, CRushton
 	 */
 	private void sendData(String fileText){
 		//split file text into chunks for transfer
@@ -347,54 +327,47 @@ public class Client {
 		DatagramPacket response = null;
 		int blockNumberInt = 0;
 		int blockNumber = 0;
+		int serverPort = 0;
 		byte[] serverResponseData, ACKData;
-		DatagramPacket ACKDatagram;
-		do{
-			//get ACK packet
-			try {
-				System.out.println("Client: waiting for acknowledge");
-				sendReceiveSocket.receive(receivePacket);
-			} catch (IOException e) {
-				System.out.println("client error while waiting for acknowledge");
-				e.printStackTrace();
-				System.exit(1);
-			}
-			//extract ACK data
-			ACKDatagram = receivePacket;
-			ACKData = ACKDatagram.getData();
-			int receivedBlockNumber = extractBlockNumber(ACKData);
-			int serverPort = ACKDatagram.getPort();
-			
-			//print information in message received
-			System.out.println("Client: recieved packet");
-			printPacketInfo(ACKDatagram);
-
-			//ensure we got an ACK repsponse
-			if(ACKDatagram.getData()[1] != OP_ACK){
-				//Checks if it was an error packet
-				if (ACKDatagram.getData()[1] == OP_ERROR) {
-
-					ByteArrayOutputStream textStream = new ByteArrayOutputStream();
-					//Retrieves the error message sent in the packet
-					for (int i = 4; ACKDatagram.getData()[i] != 0; i++) {
-						textStream.write(ACKDatagram.getData()[i]);
+		boolean keepReceiving = true;
+		//get ACK packet
+		do {
+			while (keepReceiving) { //received a packet, but packet was found not valid
+				while (keepReceiving) { //did not receive a packet
+					try {
+						System.out.println("Client: waiting for acknowledge");
+						sendReceiveSocket.receive(receivePacket);
+						keepReceiving = false;
+					} catch (SocketTimeoutException er) { //Timed out, resend previous packet
+						sendMessage(lastPacketSent);
+					} catch (IOException e) {
+						System.err.println("client error while waiting for acknowledge");
+						e.printStackTrace();
+						System.exit(1);
 					}
-					String errorMessage = textStream.toString();
-					System.out.println("\n" + errorMessage + "\n");
-				} else {
-					System.out.println("Error: expected ACK, received unknown message.");
 				}
-				return;
+				//extract ACK data
+				ACKData = receivePacket.getData();
+				int receivedBlockNumber = extractBlockNumber(ACKData);
+				serverPort = receivePacket.getPort();
+
+				//print information in message received
+				System.out.println("Client: received packet");
+				printPacketInfo(receivePacket);
+
+				if (checkACK(receivePacket) < 0) {
+					keepReceiving = true;
+				}
+
+				//ensure we got an ACK matching the block number sent
+				if (receivedBlockNumber != blockNumber) {
+					System.err.println("Error: ACK block number does not match sent block number.");
+					keepReceiving = true;
+				}
 			}
-			//ensure we got an ACK matching the block number sent
-			if(receivedBlockNumber != blockNumber){
-				System.out.println("Error: ACK block number does not match sent block number.");
-				return;
-			}
-			
 			if(response != null && response.getLength() < MAX_PACKET_SIZE)
 				break;
-			
+
 			//update block number
 			blockNumber++;
 			byte[] blockNumberArray = intToByteArray(blockNumber);
@@ -408,11 +381,11 @@ public class Client {
 			for(int i = 0; i < fileData[blockNumberInt].length; i++){
 				outputStream.write(fileData[blockNumberInt][i]);
 			}
-			blockNumberInt++;	
+			blockNumberInt++;
 			serverResponseData = outputStream.toByteArray();
 
 			//create data datagram
-			response = new DatagramPacket(serverResponseData, serverResponseData.length, 
+			response = new DatagramPacket(serverResponseData, serverResponseData.length,
 					serverInetAddress, serverPort);
 
 			//print information in message to send
@@ -422,14 +395,43 @@ public class Client {
 			//send datagram
 			sendMessage(response);
 			System.out.println("Client: packet sent");
+
 		}while(true);
 	}
 
 	/**
+	 * looks for errors in ACK packet
+	 * @author Luke Newton, CRushton
+	 * @param ACKDatagram An ACK datagram packet
+	 * @return int A negative number if there is an error and 1 if everything is expected
+	 */
+	private int checkACK(DatagramPacket ACKDatagram) {
+		//ensure we got an ACK response
+		if(ACKDatagram.getData()[1] != OP_ACK) {
+			//Checks if it was an error packet
+			if (ACKDatagram.getData()[1] == OP_ERROR) {
+
+				ByteArrayOutputStream textStream = new ByteArrayOutputStream();
+				//Retrieves the error message sent in the packet
+				for (int i = 4; ACKDatagram.getData()[i] != 0; i++) {
+					textStream.write(ACKDatagram.getData()[i]);
+				}
+				String errorMessage = textStream.toString();
+				System.err.println("\n" + errorMessage + "\n");
+				return -1;
+			} else {
+				System.err.println("Error: expected ACK, received unknown message.");
+				return -2;
+			}
+		}
+		return 1;
+	}
+
+	/**
 	 * segments data into proper sized chunks to send in packets
-	 * 
+	 *
 	 * @author Luke Newton
-	 * @param data the data to segement 
+	 * @param data the data to segment
 	 * @return an array containing byte arrays of a max length 512
 	 */
 	private byte[][] splitByteArray(byte[] data){
@@ -460,7 +462,7 @@ public class Client {
 
 	/**
 	 * extract a block number from an ACK packet
-	 * 
+	 *
 	 * @author Luke Newton
 	 * @param ACKData the data the ACK packet contains
 	 * @return the block number of the ACK packet
@@ -471,7 +473,7 @@ public class Client {
 
 	/**
 	 * converts and integer into a byte array
-	 * 
+	 *
 	 * @author Luke Newton
 	 * @param blockNumber the integer to convert to a byte array
 	 * @return the passed integer as a byte array
@@ -482,15 +484,15 @@ public class Client {
 
 	/**
 	 * retrieve a file from the server in multple chunks and put blocks together
-	 * 
+	 *
 	 * currently assumes that chunks of message appear in correct order!
-	 * 
-	 * @author Joe Frederick Samuel, Luke Newton
+	 *
+	 * @author Joe Frederick Samuel, Luke Newton, CRushton
 	 * @return the file retrieved from the server as a byte array
 	 */
 	protected byte[] receiveFile(){
 		//store the packets received from the server
-		DatagramPacket response;
+		//DatagramPacket response;
 		//the size of the message received from the server
 		int messageSize;
 		//current block number of DATA
@@ -499,22 +501,40 @@ public class Client {
 		byte[] serverResponseData;
 		//buffer to store what has been received so far
 		List<Byte> responseBuffer = new ArrayList<>();
-		do{
-			//recieve server message
-			response = waitReceiveMessage();
+
+		boolean keepReceiving = true;
+		do { //TODO: Handle incorrect packet type received. Keep receiving?
+			while (keepReceiving) { //if timed out, send last packet sent and try receiving again
+				//receive server message
+				receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
+				try {
+					sendReceiveSocket.receive(receivePacket);
+					keepReceiving = false;
+				} catch (SocketTimeoutException er) {
+					if (blockNumber == 0) { //if we need to send another RRQ
+						sendMessage(lastPacketSent);
+					} else { //send last ACK
+						acknowledge(intToByteArray(blockNumber));
+					}
+				} catch (IOException e) {
+					System.out.println("IOException: I/O error occurred while client waiting for message");
+					e.printStackTrace();
+					System.exit(1);
+				}
+			}
 
 			//print information in message to send
 			System.out.println("Client: received packet");
-			printPacketInfo(response);
+			printPacketInfo(receivePacket);
 
 			//get size of the message
-			messageSize = response.getLength();
+			messageSize = receivePacket.getLength();
 			//get response datagram data
-			serverResponseData = response.getData();
+			serverResponseData = receivePacket.getData();
 
 			//if we did not get a DATA packet, exit
 			if(serverResponseData[1] != OP_DATA){
-				System.out.println("Error during file read: unexpected packet format.");
+				System.err.println("Error during file read: unexpected packet format.");
 				return null;
 			}
 
@@ -525,9 +545,10 @@ public class Client {
 			for(int i = 4; i < messageSize; i++)
 				responseBuffer.add(serverResponseData[i]);
 
-			//send acknowledgement to server (paramter passed is a conversion of int to byte[])
+			//send acknowledgement to server (parameter passed is a conversion of int to byte[])
 			acknowledge(intToByteArray(blockNumber));
-		}while(!isLastPacket(response));
+
+		} while(!isLastPacket(receivePacket));
 
 		/*get final byte array from response buffer*/
 		ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
@@ -539,7 +560,7 @@ public class Client {
 
 	/**
 	 * Reads the contents of the file and stores it as an array of bytes.
-	 * 
+	 *
 	 * @param filename the name of the file to be read
 	 * @return contents of the file read in
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
@@ -559,7 +580,7 @@ public class Client {
 
 	/**
 	 * prints a menu containing all valid client commands
-	 * 
+	 *
 	 * @author Luke Newton
 	 */
 	private void printHelpMenu() {
