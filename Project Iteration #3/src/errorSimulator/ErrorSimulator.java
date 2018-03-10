@@ -147,10 +147,11 @@ public class ErrorSimulator {
 	 * 
 	 * @param b boolean indicating whether further data transfers will have a duplicate 
 	 * packet error to handle
-	 * @author Luke Newton
+	 * @author Luke Newton, CRushton
 	 */
-	public void setPacketDuplicate(boolean b) {
+	public void setPacketDuplicate(boolean b, int millis) {
 		this.packetDuplicateError = b;
+		this.packetDelayTime = millis;
 	}
 
 

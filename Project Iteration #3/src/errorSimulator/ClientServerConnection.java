@@ -216,10 +216,10 @@ public class ClientServerConnection implements Runnable {
 					e.printStackTrace();
 					System.exit(1);
 				}
+				(new Thread(new PacketDelayRunnable(sendPacket, sendRecieveSocket, packetDelayTime))).start();
 				//print data to send to server
 				printMessageToSend(sendPacket);
-				//send message to server
-				sendMessage(sendPacket);
+
 				//wait for server reponse
 				response = waitReceiveMessage();
 
@@ -285,27 +285,9 @@ public class ClientServerConnection implements Runnable {
 
 				int portToSendPacket = 0;
 				String recipient = "";
-				
-				//duplicate DATA and ACK packets
-				if(createDuplicateError &&
-						((errorOpCode == OP_DATA && messageData[1] == OP_ACK && (filetransfers/2) == errorBlockNumber) || 
-								(errorOpCode == OP_ACK && messageData[1] == OP_DATA && ((filetransfers)/2) == errorBlockNumber))){
-					//resend previous message
-					messageData = Arrays.copyOf(previousResponse.getData(), previousResponse.getLength());
-					if(response.getPort() == clientPort){
-						//send to server
-						portToSendPacket = clientPort;
-						recipient = "client";
-					} else {
-						//send to client
-						serverPort = response.getPort();
-						portToSendPacket = serverPort;
-						recipient = "server";
-					}
-					createDuplicateError = false;
-				}
+
 				//normal operations to determine who to send packet to
-				else if(response.getPort() == clientPort){
+				if(response.getPort() == clientPort){
 					//send to server
 					portToSendPacket = serverPort;
 					recipient = "server";
@@ -314,6 +296,17 @@ public class ClientServerConnection implements Runnable {
 					serverPort = response.getPort();
 					portToSendPacket = clientPort;
 					recipient = "client";
+				}
+
+				//duplicate DATA and ACK packets
+				if(createDuplicateError &&
+						((errorOpCode == OP_DATA && messageData[1] == OP_ACK && (filetransfers/2) == errorBlockNumber) ||
+								(errorOpCode == OP_ACK && messageData[1] == OP_DATA && ((filetransfers)/2) == errorBlockNumber))){
+					//resend previous message
+					messageData = Arrays.copyOf(previousResponse.getData(), previousResponse.getLength());
+
+					(new Thread(new PacketDelayRunnable(sendPacket, sendRecieveSocket, packetDelayTime))).start();
+					createDuplicateError = false;
 				}
 
 				//create packet to send to recipient

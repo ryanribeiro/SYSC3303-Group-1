@@ -35,15 +35,16 @@ public class ErrorSimMenuRunnable implements Runnable{
 
 		printHelpMenu();
 
-		do{
+		do {
 			System.out.print("command:");
 			input = s.nextLine().split(" ");
 
-			try{
+			try {
 				//check for valid command keyword
 				if(input[0].equalsIgnoreCase("normal")){
-					errorSim.setPacketDuplicate(false);
+					errorSim.setPacketDuplicate(false, 0);
 					errorSim.setPacketLose(false);
+					errorSim.setPacketDelay(false, 0);
 					System.out.println("System set to normal operations");
 				}else if(input[0].equalsIgnoreCase("duplicate") || input[0].equalsIgnoreCase("lose")
 						|| input[0].equalsIgnoreCase("delay")){
@@ -75,7 +76,11 @@ public class ErrorSimMenuRunnable implements Runnable{
 
 					//activate artificial error creation in error simulator
 					if(input[0].equalsIgnoreCase("duplicate")){
-						errorSim.setPacketDuplicate(true);
+
+						if(errorOpCode == OP_WRQ || errorOpCode == OP_RRQ)
+							errorSim.setPacketDuplicate(true, Integer.parseInt(input[2]));
+						else
+							errorSim.setPacketDuplicate(true, Integer.parseInt(input[3]));
 						System.out.println("System set to insert artificial duplicate packet error");
 					} else if(input[0].equalsIgnoreCase("lose")){
 						errorSim.setPacketLose(true);
@@ -112,7 +117,7 @@ public class ErrorSimMenuRunnable implements Runnable{
 	 */
 	private void printHelpMenu(){
 		System.out.println("\ntype 'normal' to have no artificial errors created (default)");
-		System.out.println("type 'duplicate' followed by the type of packet to duplicate and packet number (if applicable) to insert a duplicate packet error");
+		System.out.println("type 'duplicate' followed by the type of packet to duplicate, packet number (if applicable) and time in milliseconds between sending duplicate to insert a duplicate packet error");
 		System.out.println("type 'lose' followed by the type of packet to lose and packet number (if applicable) to insert a packet loss error");
 		System.out.println("type 'delay' followed by the type of packet to delay, pack number (if applicable), and milliseconds to delay for to insert a packet transfer delay");
 		System.out.println("type 'quit' to close the error simulator (will not allow for any further file transfers to take place)");
