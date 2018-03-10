@@ -26,7 +26,7 @@ public class Client {
 	//mode to send to server
 	private static final String MODE = "octet";
 	//change this to turn on/off timeouts for the client
-	private static final boolean TIMEOUTS_ON = false;
+	private static final boolean TIMEOUTS_ON = true;
 	//Milliseconds until client times out while waiting for response
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//max block size as an int
@@ -158,7 +158,7 @@ public class Client {
 	 * sends a datagram through the intermediate host's sendReceiveSocket
 	 * @author Luke Newton
 	 *
-	 * @param message	the datagram packet to send
+	 * @param message the datagram packet to send
 	 */
 	private void sendMessage(DatagramPacket message){
 		try {
@@ -171,22 +171,6 @@ public class Client {
 		System.out.print("Sending packet \nTo: ");
 		printPacketInfo(message);
 		lastPacketSent = message;
-	}
-
-	/**
-	 * prints packet information
-	 *
-	 * @author Luke Newton, Cameron Rushton
-	 * @param packet DatagramPacket
-	 */
-	private void printPacketInfo(DatagramPacket packet) {
-		//get meaningful portion of message
-		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());
-
-		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
-		System.out.println("Message length: " + packet.getLength());
-		System.out.println("Containing: " + new String(dataAsByteArray));
-		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
 	}
 
 	/**
@@ -327,7 +311,7 @@ public class Client {
 		do {
 			keepReceiving = true;
 			while (keepReceiving) { //received a packet, but packet was found not valid
-				while (keepReceiving) { //did not receive a packet
+				while (keepReceiving) { //did not receive a packet, resend previous packet
 					try {
 						System.out.println("Client: waiting for acknowledge");
 						sendReceiveSocket.receive(receivePacket);
@@ -568,6 +552,30 @@ public class Client {
 			System.out.println("Access violation while trying to read file from server.");
 			return null;
 		}
+	}
+
+	/**
+	 * prints packet information
+	 *
+	 * @author Luke Newton, Cameron Rushton
+	 * @param packet DatagramPacket
+	 */
+	private void printPacketInfo(DatagramPacket packet) {
+		//get meaningful portion of message
+		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());
+
+		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
+		System.out.println("Message length: " + packet.getLength());
+		System.out.print("Type: ");
+		switch(dataAsByteArray[1]) {
+			case 1: System.out.println("RRQ"); break;
+			case 2: System.out.println("WRQ"); break;
+			case 3: System.out.println("DATA"); break;
+			case 4: System.out.println("ACK"); break;
+			case 5: System.out.println("ERROR"); break;
+		}
+		System.out.println("Containing: " + new String(dataAsByteArray));
+		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
 	}
 
 	/**

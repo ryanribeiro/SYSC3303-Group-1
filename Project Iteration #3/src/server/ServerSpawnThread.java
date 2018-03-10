@@ -4,11 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,6 +12,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /**
  * handles the processing of a single client request
@@ -44,11 +41,16 @@ public class ServerSpawnThread implements Runnable {
 
 	//port number of client to send response to
 	private int clientPort;
+	//last packet sent
+	private DatagramPacket lastPacketSent;
 
 	private static final String TFTP_SERVER_IP = "127.0.0.1";
 	private static final int MAX_PACKET_SIZE = 516;
 	//max block size as an int
 	private static final int MAX_BLOCK_SIZE = 512;
+	//Socket timeouts
+	private static final boolean TIMEOUTS_ON = true;
+	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//TFTP OP code
 	private static final byte OP_RRQ = 1;
 	private static final byte OP_WRQ = 2;
@@ -144,7 +146,7 @@ public class ServerSpawnThread implements Runnable {
 
 		} catch (IOException e) {
 			//sends error packet to client
-			System.out.println("Failed to read file at specified path");
+			System.err.println("Failed to read file at specified path");
 			try {
 				createAndSendErrorPacket(FILE_NOT_FOUND, "Failed to read file - File not found.");
 			} catch (IOException er) {
@@ -164,22 +166,23 @@ public class ServerSpawnThread implements Runnable {
 		}
 	}
 	/**
-	 * Sends the contents of a file to the client through error sim.
+	 * Sends the contents of a file during a RRQ to the client through error sim.
 	 * 
 	 * @param fileText the file data to send
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 */
-	private void sendData(String fileText){
+	private void sendData(String fileText) {
 
 		//split file text into chunks for transfer
 		byte[][] fileData = splitByteArray(fileText.getBytes());
-
 		//create socket to transfer file
 		DatagramSocket sendReceiveSocket = null;
 		try {
 			sendReceiveSocket = new DatagramSocket();
+			if (TIMEOUTS_ON)
+				sendReceiveSocket.setSoTimeout(TIMEOUT_MILLISECONDS);
 		} catch (SocketException e) {
-			System.out.println("Server error while creating socket to transfer data");
+			System.err.println("Server error while creating socket to transfer data");
 			e.printStackTrace();
 			System.exit(1);
 		}
@@ -190,7 +193,8 @@ public class ServerSpawnThread implements Runnable {
 		int blockNumber = 0;
 		byte[] serverResponseData, ACKData;
 		DatagramPacket ACKDatagram;
-		do{
+		boolean keepReceiving;
+		do {
 			//update block number
 			blockNumber++;
 			byte[] blockNumberArray = intToByteArray(blockNumber);
@@ -201,10 +205,10 @@ public class ServerSpawnThread implements Runnable {
 			outputStream.write(OP_DATA);
 			outputStream.write(blockNumberArray[2]);
 			outputStream.write(blockNumberArray[3]);
-			for(int i = 0; i < fileData[blockNumberInt].length; i++){
+			for (int i = 0; i < fileData[blockNumberInt].length; i++){
 				outputStream.write(fileData[blockNumberInt][i]);
 			}
-			blockNumberInt++;	
+			blockNumberInt++;
 			serverResponseData = outputStream.toByteArray();
 
 			//create data datagram
@@ -218,44 +222,59 @@ public class ServerSpawnThread implements Runnable {
 			//send datagram
 			try {
 				sendReceiveSocket.send(response);
+
 			} catch (IOException e) {
-				System.out.println("Server error while sending data packet to client");
+				System.err.println("Server error while sending data packet to client");
 				e.printStackTrace();
 				System.exit(1);
 			}
-
+			lastPacketSent = response;
 			//exit when the final packet is sent from the server
 			if(response.getLength() < MAX_PACKET_SIZE)
 				break;
 
-			//get ACK packet
-			try {
-				System.out.println("Server: waiting for acknowledge");
-				sendReceiveSocket.receive(receivePacket);
-			} catch (IOException e) {
-				System.out.println("Server error while waiting for acknowledge");
-				e.printStackTrace();
-				System.exit(1);
-			}
-			//extract ACK data
-			ACKDatagram = receivePacket;
-			ACKData = ACKDatagram.getData();
-			int receivedBlockNumber = extractBlockNumber(ACKData);
+			do { //keep receiving if the packet was not the one expected. NOTE: Packet last received is thrown out if unexpected.
+				do { //keep receiving if no packet is given and socket times out.
+					keepReceiving = true;
+					//get ACK packet
+					try {
+						System.out.println("Server: waiting for acknowledge");
+						sendReceiveSocket.receive(receivePacket);
+						keepReceiving = false;
+					} catch (SocketTimeoutException te) {
+						//resend last packet
+						try {
+							sendReceiveSocket.send(lastPacketSent);
+						} catch (IOException e) {
+							System.err.println("Server error while sending data packet to client");
+							e.printStackTrace();
+						}
+					} catch (IOException e) {
+						System.err.println("Server error while waiting for acknowledge");
+						e.printStackTrace();
+						System.exit(1);
+					}
+				} while (keepReceiving);
+				//extract ACK data
+				ACKDatagram = receivePacket;
+				ACKData = ACKDatagram.getData();
+				int receivedBlockNumber = extractBlockNumber(ACKData);
 
-			//print information in message received
-			System.out.println("Server: recieved packet");
-			printPacketInfo(ACKDatagram);
+				//print information in message received
+				System.out.println("Server: received packet");
+				printPacketInfo(ACKDatagram);
 
-			//ensure we got an ACK response
-			if(ACKDatagram.getData()[1] != OP_ACK){
-				System.out.println("Error: expected ACK, received unknown message.");
-				return;
-			}
-			//ensure we got an ACK matching the block number sent
-			if(receivedBlockNumber != blockNumber){
-				System.out.println("Error: ACK block number does not match sent block number.");
-				return;
-			}
+				//ensure we got an ACK response
+				if (ACKDatagram.getData()[1] != OP_ACK) {
+					System.err.println("Error: expected ACK, received unknown message.");
+					keepReceiving = true;
+				}
+				//ensure we got an ACK matching the block number sent
+				if (receivedBlockNumber != blockNumber) {
+					System.err.println("Error: ACK block number does not match sent block number.");
+					keepReceiving = true;
+				}
+			} while(keepReceiving);
 		} while(true);
 		sendReceiveSocket.close();
 	}
@@ -285,7 +304,7 @@ public class ServerSpawnThread implements Runnable {
 	/**
 	 * segments data into proper sized chunks to send in packets
 	 * 
-	 * @param data the data to segement 
+	 * @param data the data to segment
 	 * @return an array containing byte arrays of a max length 512
 	 */
 	private byte[][] splitByteArray(byte[] data){
@@ -375,7 +394,7 @@ public class ServerSpawnThread implements Runnable {
 	 * @author Joe Frederick Samuel, Luke Newton
 	 * @return the file retrieved from the server as a byte array
 	 */
-	protected byte[] receiveFile(){
+	private byte[] receiveFile(){
 		//store the packets received from the server
 		DatagramPacket response = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
 		//the size of the message received from the server
@@ -390,51 +409,66 @@ public class ServerSpawnThread implements Runnable {
 		DatagramSocket sendReceiveSocket = null;
 		try {
 			sendReceiveSocket = new DatagramSocket();
+			if (TIMEOUTS_ON)
+				sendReceiveSocket.setSoTimeout(TIMEOUT_MILLISECONDS);
 		} catch (SocketException e) {
-			System.out.println("failed to create server sokcet");
+			System.err.println("Failed to create server socket");
 			e.printStackTrace();
 			System.exit(1);
 		}
+		boolean keepReceiving;
 		do {
-			//send acknowledgement to client. It should be determined after writing the file successfully whether an ACK should be sent or an error
+			//Send acknowledgement to client. It should be determined after writing the file successfully whether an ACK should be sent or an error
 			if (noErrors && !(response.getLength() < MAX_PACKET_SIZE))
 				acknowledge(intToByteArray(blockNumber), sendReceiveSocket);
-			
-			if(response.getLength() < MAX_PACKET_SIZE) {
+
+			if (response.getLength() < MAX_PACKET_SIZE) {
 				lastBlockNum = blockNumber;
 				break;
 			}
-				
-			//receive client message
-			try {
-				sendReceiveSocket.receive(response);
-			} catch (IOException e) {
-				System.out.println("I/O Exception while receiving message");
-				e.printStackTrace();
-				System.exit(1);
-			}
+			do { //keep receiving if unexpected packet was received. Note: last packet received is thrown out
+				do { //send last packet & keep receiving if timeout happens
+					keepReceiving = true;
+					//receive client message
+					try {
+						sendReceiveSocket.receive(response);
+						keepReceiving = false;
+					} catch (SocketTimeoutException te) {
+						//resend last message
+						try {
+							sendReceiveSocket.send(lastPacketSent);
+						} catch (IOException e) {
+							System.err.println("I/O Exception while resending message");
+							e.printStackTrace();
+						}
+					} catch (IOException e) {
+						System.err.println("I/O Exception while receiving message");
+						e.printStackTrace();
+						System.exit(1);
+					}
+				} while (keepReceiving);
+				//print information in message received
+				System.out.println("Server: received packet");
+				printPacketInfo(response);
 
-			//print information in message received
-			System.out.println("server: received packet");
-			printPacketInfo(response);
+				//get size of the message
+				messageSize = response.getLength();
+				//get response datagram data
+				serverResponseData = response.getData();
 
-			//get size of the message
-			messageSize = response.getLength();
-			//get response datagram data
-			serverResponseData = response.getData();
-
-			//if we did not get a DATA packet, exit
-			if(serverResponseData[1] != OP_DATA){
-				System.err.println("Error during file read: unexpected packet format.");
-				return null;
-			}
-
+				//if we did not get a DATA packet, exit
+				if (serverResponseData[1] != OP_DATA) {
+					System.err.println("Error during file read: unexpected packet format.");
+					keepReceiving = true;
+				}
+			} while(keepReceiving);
 			//get block number
 			blockNumber = extractBlockNumber(serverResponseData);
 
 			//add response data to buffer (index 4 is the start of data in TFTP DATA packets)
 			for(int i = 4; i < messageSize; i++)
 				responseBuffer.add(serverResponseData[i]);
+
 		} while(true);
 
 		/*get final byte array from response buffer*/
@@ -455,7 +489,7 @@ public class ServerSpawnThread implements Runnable {
 		byte[] ack = {0, OP_ACK, blockID[2], blockID[3]};
 		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, serverInetAddress, receivePacket.getPort());
 
-		//create socket if needed TODO: Convert to sendMessage()
+		//create socket if needed
 		if (socket == null) {
 			try {
 				socket = new DatagramSocket();
@@ -469,7 +503,8 @@ public class ServerSpawnThread implements Runnable {
 			System.err.println("Server error while sending ACK to client");
 			e.printStackTrace();
 			System.exit(1);
-		}		
+		}
+		lastPacketSent = ACKDatagram;
 		System.out.println("sent acknowledgement to client");
 	}
 
@@ -555,45 +590,20 @@ public class ServerSpawnThread implements Runnable {
 	}
 
 	/**
-	 * formats a message as a response to the appropriate request
-	 * Used exclusively for read/write
-	 * 
-	 * @return the message converted into a byte array with proper format
-	 */
-	protected byte[] createPacketData() {
-		ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-
-		byteStream.write(0);
-
-		if(readRequest)
-			byteStream.write(3);
-		else if (writeRequest)
-			byteStream.write(4);
-
-		byteStream.write(0);
-
-		if(readRequest)
-			byteStream.write(1);
-		else if (writeRequest)
-			byteStream.write(0);
-
-		return byteStream.toByteArray();
-	}
-
-	/**
 	 * sends a datagram from the server
 	 * 
 	 * @param message the datagram packet to send
 	 */
-	public void sendMessage(DatagramPacket message){
+	private void sendMessage(DatagramPacket message){
 		try {
 			sendSocket = new DatagramSocket();
 			sendSocket.send(message);
 		} catch (IOException e) {
-			System.out.println("IOException: I/O error occured while server sending message");
+			System.out.println("IOException: I/O error occurred while server sending message");
 			e.printStackTrace();
 			System.exit(1);
 		}
+		lastPacketSent = message;
 		sendSocket.close();
 	}
 	
@@ -650,6 +660,14 @@ public class ServerSpawnThread implements Runnable {
 
 		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
 		System.out.println("Message length: " + packet.getLength());
+		System.out.print("Type: ");
+		switch(dataAsByteArray[1]) {
+			case 1: System.out.println("RRQ"); break;
+			case 2: System.out.println("WRQ"); break;
+			case 3: System.out.println("DATA"); break;
+			case 4: System.out.println("ACK"); break;
+			case 5: System.out.println("ERROR"); break;
+		}
 		System.out.println("Containing: " + new String(dataAsByteArray));
 		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
 	}
