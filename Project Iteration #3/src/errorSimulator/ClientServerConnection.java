@@ -45,6 +45,8 @@ public class ClientServerConnection implements Runnable {
 	private int errorBlockNumber;
 	//specifies whether an error should be artificailly created
 	private boolean createDuplicateError, createLostError;
+	private boolean createPacketDelay;
+	private int packetDelayTime;
 
 	//TFTP OP code
 	private static final byte OP_RRQ = 1;
@@ -84,12 +86,15 @@ public class ClientServerConnection implements Runnable {
 	 * @param errorBlockNumber specifies which ACK/DATA to create error on
 	 */
 	ClientServerConnection(DatagramPacket request, ErrorSimulator errorSim, boolean createDuplicateError, 
-			boolean createLostError, int errorPacketType, int errorBlockNumber) {
+			boolean createLostError, boolean createPacketDelay, int errorPacketType, int errorBlockNumber,
+			int delayTime) {
 		this(request, errorSim);
 		this.errorOpCode = errorPacketType;
 		this.errorBlockNumber = errorBlockNumber;
 		this.createDuplicateError = createDuplicateError;
 		this.createLostError = createLostError;
+		this.createPacketDelay = createPacketDelay;
+		this.packetDelayTime = delayTime;
 	}
 
 	/**
@@ -176,10 +181,18 @@ public class ClientServerConnection implements Runnable {
 
 			//print data to send to server
 			printMessageToSend(sendPacket);
-
-			//send datagram to server
-			sendMessage(sendPacket);
-			System.out.println("Error simulator sent message to server");
+			
+			//delay RRQ/WRQ
+			if(createPacketDelay&& ((errorOpCode == OP_WRQ && connectionOpCode == OP_WRQ) 
+					|| (errorOpCode == OP_RRQ && connectionOpCode == OP_RRQ))){
+				(new Thread(new PacketDelayRunnable(sendPacket, sendRecieveSocket, packetDelayTime))).start();
+				createPacketDelay = false;
+			} else {
+				//send datagram to server
+				sendMessage(sendPacket);
+				System.out.println("Error simulator sent message to server");
+			}
+			
 
 			//wait to receive response from server
 			System.out.println("Error simulator waiting on response from server...");
@@ -193,7 +206,7 @@ public class ClientServerConnection implements Runnable {
 			//print request received by server
 			printMessageRecieved(response);
 
-			//create duplicate WRQ and RRQ is necessary
+			//create duplicate WRQ and RRQ if necessary
 			if(createDuplicateError && ((errorOpCode == OP_WRQ && previousResponse.getData()[1] == OP_WRQ) 
 					|| (errorOpCode == OP_RRQ && previousResponse.getData()[1] == OP_RRQ))){
 				//send another request to server
@@ -231,8 +244,6 @@ public class ClientServerConnection implements Runnable {
 			//send datagram to client
 			sendMessage(sendPacket);
 			System.out.println("Error simulator sent message to client");
-
-
 
 			//a DATA/ACK pair represents on  complete packet transfer
 			int filetransfers = 1;
@@ -302,6 +313,15 @@ public class ClientServerConnection implements Runnable {
 					System.err.println("UnknownHostException: could not determine IP address of host while creating packet.");
 					e.printStackTrace();
 					System.exit(1);
+				}
+				
+				//delay DATA and ACK
+				if(createPacketDelay &&
+						((errorOpCode == OP_DATA && messageData[1] == OP_DATA && (filetransfers/2 + 1) == errorBlockNumber) || 
+								(errorOpCode == OP_ACK && messageData[1] == OP_ACK && (filetransfers/2) == errorBlockNumber))){
+					(new Thread(new PacketDelayRunnable(sendPacket ,sendRecieveSocket, packetDelayTime))).start();
+					createPacketDelay = false;
+					continue;
 				}
 
 				//send mesage to recipient
