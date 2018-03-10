@@ -50,7 +50,7 @@ public class ServerSpawnThread implements Runnable {
 	private static final int MAX_BLOCK_SIZE = 512;
 	//Socket timeouts
 	private static final boolean TIMEOUTS_ON = true;
-	private static final int TIMEOUT_MILLISECONDS = 5000;
+	private static final int TIMEOUT_MILLISECONDS = 7000;
 	//TFTP OP code
 	private static final byte OP_RRQ = 1;
 	private static final byte OP_WRQ = 2;
@@ -229,10 +229,8 @@ public class ServerSpawnThread implements Runnable {
 				System.exit(1);
 			}
 			lastPacketSent = response;
-			//exit when the final packet is sent from the server
-			if(response.getLength() < MAX_PACKET_SIZE)
-				break;
 
+			int numTimeouts = 0;
 			do { //keep receiving if the packet was not the one expected. NOTE: Packet last received is thrown out if unexpected.
 				do { //keep receiving if no packet is given and socket times out.
 					keepReceiving = true;
@@ -243,6 +241,9 @@ public class ServerSpawnThread implements Runnable {
 						keepReceiving = false;
 					} catch (SocketTimeoutException te) {
 						//resend last packet
+						numTimeouts += 1;
+						System.err.println("Timed out. Resending last packet.");
+						printPacketInfo(lastPacketSent);
 						try {
 							sendReceiveSocket.send(lastPacketSent);
 						} catch (IOException e) {
@@ -254,7 +255,7 @@ public class ServerSpawnThread implements Runnable {
 						e.printStackTrace();
 						System.exit(1);
 					}
-				} while (keepReceiving);
+				} while (keepReceiving && numTimeouts < 3);
 				//extract ACK data
 				ACKDatagram = receivePacket;
 				ACKData = ACKDatagram.getData();
@@ -265,17 +266,23 @@ public class ServerSpawnThread implements Runnable {
 				printPacketInfo(ACKDatagram);
 
 				//ensure we got an ACK response
-				if (ACKDatagram.getData()[1] != OP_ACK) {
-					System.err.println("Error: expected ACK, received unknown message.");
+				if (ACKDatagram.getData()[1] != OP_ACK || receivedBlockNumber != blockNumber) {
+					System.err.println("Error: packet not expected. Resending last packet sent.");
+					printPacketInfo(lastPacketSent);
+					try {
+						sendReceiveSocket.send(lastPacketSent);
+					} catch (IOException e) {
+						System.err.println("Server error while sending data packet to client");
+						e.printStackTrace();
+					}
 					keepReceiving = true;
 				}
-				//ensure we got an ACK matching the block number sent
-				if (receivedBlockNumber != blockNumber) {
-					System.err.println("Error: ACK block number does not match sent block number.");
-					keepReceiving = true;
-				}
-			} while(keepReceiving);
-		} while(true);
+
+			} while(keepReceiving && numTimeouts < 3);
+
+			//Exit when the final ACK is received. If we reach here, the received ACK has been dealt with.
+			// Just check that last packet has been sent.
+		} while(response.getLength() == MAX_PACKET_SIZE);
 		sendReceiveSocket.close();
 	}
 
@@ -417,6 +424,7 @@ public class ServerSpawnThread implements Runnable {
 			System.exit(1);
 		}
 		boolean keepReceiving;
+		int numTimeouts = 0;
 		do {
 			//Send acknowledgement to client. It should be determined after writing the file successfully whether an ACK should be sent or an error
 			if (noErrors && !(response.getLength() < MAX_PACKET_SIZE))
@@ -435,6 +443,7 @@ public class ServerSpawnThread implements Runnable {
 						keepReceiving = false;
 					} catch (SocketTimeoutException te) {
 						//resend last message
+						numTimeouts += 1;
 						try {
 							sendReceiveSocket.send(lastPacketSent);
 						} catch (IOException e) {
@@ -446,7 +455,7 @@ public class ServerSpawnThread implements Runnable {
 						e.printStackTrace();
 						System.exit(1);
 					}
-				} while (keepReceiving);
+				} while (keepReceiving && numTimeouts < 3);
 				//print information in message received
 				System.out.println("Server: received packet");
 				printPacketInfo(response);
@@ -461,7 +470,7 @@ public class ServerSpawnThread implements Runnable {
 					System.err.println("Error during file read: unexpected packet format.");
 					keepReceiving = true;
 				}
-			} while(keepReceiving);
+			} while(keepReceiving && numTimeouts < 3);
 			//get block number
 			blockNumber = extractBlockNumber(serverResponseData);
 

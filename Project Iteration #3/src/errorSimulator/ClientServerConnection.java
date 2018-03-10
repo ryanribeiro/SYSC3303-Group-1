@@ -7,11 +7,7 @@
 package errorSimulator;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.util.Arrays;
 
 /**
@@ -70,6 +66,7 @@ public class ClientServerConnection implements Runnable {
 		} catch (SocketException e) {
 			e.printStackTrace();
 		}
+
 		this.errorSim = errorSim;
 		this.createDuplicateError = false;
 		this.createLostError = false;
@@ -119,7 +116,7 @@ public class ClientServerConnection implements Runnable {
 	 * @author Luke Newton
 	 * @return returns the receive datagram packet
 	 */
-	private DatagramPacket waitReceiveMessage(){
+	private DatagramPacket waitReceiveMessage() {
 		recievePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
 		try {
 			sendRecieveSocket.receive(recievePacket);
@@ -137,7 +134,7 @@ public class ClientServerConnection implements Runnable {
 	 * @author Luke Newton
 	 * @param message	the datagram packet to send
 	 */
-	public void sendMessage(DatagramPacket message){
+	private void sendMessage(DatagramPacket message){
 		try {
 			sendRecieveSocket.send(message);
 		} catch (IOException e) {
@@ -165,7 +162,7 @@ public class ClientServerConnection implements Runnable {
 			messageData = Arrays.copyOf(request.getData(), request.getLength());		
 			clientPort = request.getPort();
 
-			//print data received from client
+			//print data received from client. Got this packet from parent ErrorSimulator.
 			printMessageRecieved(request);
 
 			//create packet to send request to server on specified port
@@ -183,7 +180,7 @@ public class ClientServerConnection implements Runnable {
 			printMessageToSend(sendPacket);
 			
 			//delay RRQ/WRQ
-			if(createPacketDelay&& ((errorOpCode == OP_WRQ && connectionOpCode == OP_WRQ) 
+			if(createPacketDelay && ((errorOpCode == OP_WRQ && connectionOpCode == OP_WRQ)
 					|| (errorOpCode == OP_RRQ && connectionOpCode == OP_RRQ))){
 				(new Thread(new PacketDelayRunnable(sendPacket, sendRecieveSocket, packetDelayTime))).start();
 				createPacketDelay = false;
@@ -192,7 +189,6 @@ public class ClientServerConnection implements Runnable {
 				sendMessage(sendPacket);
 				System.out.println("Error simulator sent message to server");
 			}
-			
 
 			//wait to receive response from server
 			System.out.println("Error simulator waiting on response from server...");
@@ -229,37 +225,51 @@ public class ClientServerConnection implements Runnable {
 
 				createLostError = false;
 			}
+			//lose DATA or lose ACK
+			if(createLostError &&
+					((errorOpCode == OP_DATA && messageData[1] == OP_DATA && 1 == errorBlockNumber) ||
+							(errorOpCode == OP_ACK && messageData[1] == OP_ACK && 1 == errorBlockNumber))){
+				createLostError = false;
+				System.out.println("Destroyed packet");
 
-			//create packet to send resposne to client
-			try {
-				sendPacket = new DatagramPacket(messageData, messageData.length,
-						InetAddress.getLocalHost(), clientPort);
-			} catch (UnknownHostException e) {
-				//failed to determine the host IP address
-				System.err.println("UnknownHostException: could not determine IP address of host while creating packet.");
-				e.printStackTrace();
-				System.exit(1);
+			} else {
+				//create packet to send resposne to client
+				try {
+					sendPacket = new DatagramPacket(messageData, messageData.length,
+							InetAddress.getLocalHost(), clientPort);
+				} catch (UnknownHostException e) {
+					//failed to determine the host IP address
+					System.err.println("UnknownHostException: could not determine IP address of host while creating packet.");
+					e.printStackTrace();
+					System.exit(1);
+				}
+
+				//send datagram to client
+				sendMessage(sendPacket);
+				System.out.println("Error simulator sent message to client");
 			}
-
-			//send datagram to client
-			sendMessage(sendPacket);
-			System.out.println("Error simulator sent message to client");
-
 			//a DATA/ACK pair represents on  complete packet transfer
 			int filetransfers = 1;
 			if(connectionOpCode == OP_RRQ)
 				filetransfers += 1;
-			while(true){
+
+			boolean destroyLastDataReceived = false;
+			while(true) {
+
 				if(messageData[1] == OP_ERROR)
 					break;
 				//copy previous message
 				previousResponse = response;
 				//get next message
-				System.out.println("Error simulator waiting on for response...");
+				System.out.println("Error simulator waiting for response...");
 				response = waitReceiveMessage();
-				
+
 				//get meaningful portion of message
 				messageData = Arrays.copyOf(response.getData(), response.getLength());
+
+				if (messageData[1] == OP_DATA) //stop error simulator from stopping when there is still data to be sent.
+					destroyLastDataReceived = false; //This indicates that it destroyed the last DATA (size < max) so it should keep running.
+
 				//print response received
 				printMessageRecieved(response);
 				
@@ -268,6 +278,8 @@ public class ClientServerConnection implements Runnable {
 						((errorOpCode == OP_DATA && messageData[1] == OP_DATA && (filetransfers/2 + 1) == errorBlockNumber) || 
 								(errorOpCode == OP_ACK && messageData[1] == OP_ACK && (filetransfers/2) == errorBlockNumber))){
 					createLostError = false;
+					System.err.println("Destroyed packet");
+					destroyLastDataReceived = true;
 					continue;
 				}
 
@@ -329,7 +341,7 @@ public class ClientServerConnection implements Runnable {
 				System.out.println("Error simulator sent message to " + recipient);
 
 				//exit when the final packet is sent from the server
-				if((previousResponse.getLength() < MAX_PACKET_SIZE && previousResponse.getData()[1] != OP_ACK &&
+				if((previousResponse.getLength() < MAX_PACKET_SIZE && previousResponse.getData()[1] != OP_ACK && !destroyLastDataReceived &&
 						((connectionOpCode == OP_RRQ   && portToSendPacket == serverPort) ||
 								(connectionOpCode == OP_WRQ && portToSendPacket == clientPort))) ||
 						messageData[1] == OP_ERROR){

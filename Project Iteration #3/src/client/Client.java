@@ -102,6 +102,7 @@ public class Client {
 	 */
 	private void acknowledge(byte[] blockID) {
 		byte[] ack = {0, OP_ACK, blockID[2], blockID[3]};
+
 		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, serverInetAddress, receivePacket.getPort());
 
 		sendMessage(ACKDatagram);
@@ -307,16 +308,20 @@ public class Client {
 		int serverPort = 0;
 		byte[] serverResponseData, ACKData;
 		boolean keepReceiving;
+		int numTimeouts = 0;
 		//get ACK packet
+
 		do {
 			keepReceiving = true;
-			while (keepReceiving) { //received a packet, but packet was found not valid
-				while (keepReceiving) { //did not receive a packet, resend previous packet
+			while (keepReceiving && numTimeouts < 3) { //received a packet, but packet was found not valid
+				while (keepReceiving && numTimeouts < 3) { //did not receive a packet, resend previous packet
 					try {
 						System.out.println("Client: waiting for acknowledge");
 						sendReceiveSocket.receive(receivePacket);
 						keepReceiving = false;
 					} catch (SocketTimeoutException er) { //Timed out, resend previous packet
+						System.err.println("Timed out, resending last packet.");
+						numTimeouts += 1;
 						sendMessage(lastPacketSent);
 					} catch (IOException e) {
 						System.err.println("client error while waiting for acknowledge");
@@ -471,22 +476,24 @@ public class Client {
 		//current block number of DATA
 		int blockNumber = 0;
 		//the data contained in the response datagram
-		byte[] serverResponseData = {};
+		byte[] serverResponseData;
 		//buffer to store what has been received so far
 		List<Byte> responseBuffer = new ArrayList<>();
 
 		boolean keepReceiving;
+		int numTimeouts = 0;
+
 		do {
 			keepReceiving = true; //new packet to receive, reset to true
-			while (keepReceiving) { //Received packet, but was incorrect format. Dont send ACK & Try to receive again
-				while (keepReceiving) { //if timed out, send last packet sent and try receiving again
-					//receive server message
-					receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
+			do { //Received packet, but was incorrect format. Dont send ACK & Try to receive again
+				do { //if timed out, send last packet sent and try receiving again
+
 					try {
 						sendReceiveSocket.receive(receivePacket);
 						keepReceiving = false;
 					} catch (SocketTimeoutException er) {
 						System.err.println("Timed out, waiting on another packet.");
+						numTimeouts += 1;
 						if (blockNumber == 0) { //if we need to send another RRQ
 							sendMessage(lastPacketSent);
 						} else { //send last ACK
@@ -497,7 +504,7 @@ public class Client {
 						e.printStackTrace();
 						System.exit(1);
 					}
-				}
+				} while (keepReceiving && numTimeouts < 3);
 
 				//print information in message received
 				System.out.println("Client: received packet");
@@ -513,7 +520,7 @@ public class Client {
 					System.err.println("Error during file read: unexpected packet format.");
 					keepReceiving = true;
 				}
-			}
+			} while (keepReceiving && numTimeouts < 3);
 			//get block number
 			blockNumber = extractBlockNumber(serverResponseData);
 
@@ -524,7 +531,10 @@ public class Client {
 			//send acknowledgement to server (parameter passed is a conversion of int to byte[])
 			acknowledge(intToByteArray(blockNumber));
 
-		} while(!isLastPacket(receivePacket));
+		} while(!isLastPacket(receivePacket) && numTimeouts < 3);
+
+		if (numTimeouts >= 3)
+			System.err.println("Client timed out");
 
 		/*get final byte array from response buffer*/
 		ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
