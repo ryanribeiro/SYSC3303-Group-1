@@ -33,11 +33,12 @@ public class ErrorSimulator {
 	//port number of client to send response to
 	private int clientPort;
 	//booleans indicating whether error types occur in a datatransfer
-	private volatile boolean packetLostError, packetDuplicateError;
+	private volatile boolean packetLostError, packetDuplicateError, createPacketDelay;
 	//specifies which blcok number to cause error on (if applicable)
 	private volatile int errorBlockNumber;
 	//specifies which type of packet to cause error on
-	private volatile int errorOpCode;
+	private volatile int errorOpCode, packetDelayTime;
+
 
 
 	/**
@@ -172,6 +173,18 @@ public class ErrorSimulator {
 	}
 
 	/**
+	 * alter the behaviour of the error simulator set introduce a packet delay
+	 * 
+	 * @param b boolean indicating whether further data transfers will have a packet delay 
+	 * @param i integer representing milllisecnds to dealy for
+	 * @author Luke Newton
+	 */
+	public void setPacketDelay(boolean b, int i) {
+		this.createPacketDelay = b;
+		this.packetDelayTime = i;
+	}
+	
+	/**
 	 * main for error simulator program containing specified 
 	 * error sim algorithm
 	 * 
@@ -208,7 +221,7 @@ public class ErrorSimulator {
 						|| (errorSim.errorOpCode == OP_RRQ && requestType == OP_RRQ))){
 					//dont send the first WRQ/RRQ recieved
 					request = errorSim.waitRecieveClientMessage();
-				}
+				} 
 			} catch (IOException e) {
 				System.err.println("IOException: I/O error occured while error simulator waiting to recieve message");
 				e.printStackTrace();
@@ -216,10 +229,11 @@ public class ErrorSimulator {
 			}
 
 			//inform the file transfer thread if we need to add artificial errors
-			if(errorSim.packetLostError || errorSim.packetDuplicateError){
+			if(errorSim.packetLostError || errorSim.packetDuplicateError || errorSim.createPacketDelay){
 				//create a client server connection with added errors
 				(new Thread(new ClientServerConnection(request, errorSim, errorSim.packetDuplicateError, 
-						errorSim.packetLostError, errorSim.errorOpCode, errorSim.errorBlockNumber))).start();
+						errorSim.packetLostError, errorSim.createPacketDelay, errorSim.errorOpCode, 
+						errorSim.errorBlockNumber, errorSim.packetDelayTime))).start();
 			}else{
 				//create a client server connection without added errors
 				(new Thread(new ClientServerConnection(request, errorSim))).start();

@@ -45,7 +45,8 @@ public class ErrorSimMenuRunnable implements Runnable{
 					errorSim.setPacketDuplicate(false);
 					errorSim.setPacketLose(false);
 					System.out.println("System set to normal operations");
-				}else if(input[0].equalsIgnoreCase("duplicate") || input[0].equalsIgnoreCase("lose")){
+				}else if(input[0].equalsIgnoreCase("duplicate") || input[0].equalsIgnoreCase("lose")
+						|| input[0].equalsIgnoreCase("delay")){
 					//check if the specified packet type is valid (RRQ, WRQ, DATA, or ACK)
 					if(input[1].equalsIgnoreCase("WRQ"))
 						errorOpCode = OP_WRQ;
@@ -79,6 +80,13 @@ public class ErrorSimMenuRunnable implements Runnable{
 					} else if(input[0].equalsIgnoreCase("lose")){
 						errorSim.setPacketLose(true);
 						System.out.println("System set to insert artificial lost packet error");	
+					} else if(input[0].equalsIgnoreCase("delay")){
+						if(errorOpCode == OP_WRQ || errorOpCode == OP_RRQ)
+							errorSim.setPacketDelay(true, Integer.parseInt(input[2]));
+						else
+							errorSim.setPacketDelay(true, Integer.parseInt(input[3]));
+						
+						System.out.println("System set to insert artificial packet delay");	
 					}
 				} else if(input[0].equalsIgnoreCase("help")){
 					printHelpMenu();
@@ -106,6 +114,7 @@ public class ErrorSimMenuRunnable implements Runnable{
 		System.out.println("\ntype 'normal' to have no artificial errors created (default)");
 		System.out.println("type 'duplicate' followed by the type of packet to duplicate and packet number (if applicable) to insert a duplicate packet error");
 		System.out.println("type 'lose' followed by the type of packet to lose and packet number (if applicable) to insert a packet loss error");
+		System.out.println("type 'delay' followed by the type of packet to delay, pack number (if applicable), and milliseconds to delay for to insert a packet transfer delay");
 		System.out.println("type 'quit' to close the error simulator (will not allow for any further file transfers to take place)");
 		System.out.println("type 'help' to display this message again\n");
 	}
