@@ -19,12 +19,26 @@ public class ErrorSimulator {
 	//miliseconds until error simulator times out while waiting for response
 	private static final int TIMEOUT_MILLISECONDS = 5000;
 
+	//TFTP OP code
+	private static final byte OP_RRQ = 1;
+	private static final byte OP_WRQ = 2;
+	private static final byte OP_DATA = 3;
+	private static final byte OP_ACK = 4;
+	private static final byte OP_ERROR = 5;
+
 	//socket for error simulator to send and receive packets
 	private DatagramSocket recieveSocket, sendRecieveSocket;
 	//buffer to contain data to send to server/client
 	private DatagramPacket recievePacket;
 	//port number of client to send response to
 	private int clientPort;
+	//booleans indicating whether error types occur in a datatransfer
+	private volatile boolean packetLostError, packetDuplicateError;
+	//specifies which blcok number to cause error on (if applicable)
+	private volatile int errorBlockNumber;
+	//specifies which type of packet to cause error on
+	private volatile int errorOpCode;
+
 
 	/**
 	 * Constructor
@@ -115,6 +129,49 @@ public class ErrorSimulator {
 	}
 
 	/**
+	 * alter the behaviour of the error simulator set introduce a lost packet error
+	 * or not
+	 * 
+	 * @param b boolean indicating whether further data transfers will have a error 
+	 * packet error to handle
+	 * @author Luke Newton
+	 */
+	public void setPacketLose(boolean b) {
+		this.packetLostError = b;
+	}
+
+	/**
+	 * alter the behaviour of the error simulator set introduce a duplicate packet
+	 * error or not
+	 * 
+	 * @param b boolean indicating whether further data transfers will have a duplicate 
+	 * packet error to handle
+	 * @author Luke Newton
+	 */
+	public void setPacketDuplicate(boolean b) {
+		this.packetDuplicateError = b;
+	}
+
+
+	/**
+	 * Set the DATA block number to cause error on
+	 * 
+	 * @param errorBlockNumber the block number to cause error on
+	 */
+	public void setErrorPacketBlockNumber(int errorBlockNumber) {
+		this.errorBlockNumber = errorBlockNumber;
+	}
+
+	/**
+	 * set the type of packet for error to occur on(RRQ, WRQ, or DATA)
+	 * 
+	 * @param errorOpCode the type of packet to cause error on
+	 */
+	public void setErrorPacketType(int errorOpCode) {
+		this.errorOpCode = errorOpCode;
+	}
+
+	/**
 	 * main for error simulator program containing specified 
 	 * error sim algorithm
 	 * 
@@ -132,19 +189,41 @@ public class ErrorSimulator {
 			System.exit(1);
 		}
 
+		//create error simulator menu
+		(new Thread(new ErrorSimMenuRunnable(errorSim))).start();
+
 		while(true){
 			//wait for message to come in from client
 			DatagramPacket request = null;
+			
 			try {
 				System.out.println("Error simulator waiting on request...");
+				
 				request = errorSim.waitRecieveClientMessage();
+				
+				int requestType = request.getData()[1];
+				
+				//create a packet loss for WRQ and RRQ
+				if(errorSim.packetLostError && ((errorSim.errorOpCode == OP_WRQ && requestType == OP_WRQ) 
+						|| (errorSim.errorOpCode == OP_RRQ && requestType == OP_RRQ))){
+					//dont send the first WRQ/RRQ recieved
+					request = errorSim.waitRecieveClientMessage();
+				}
 			} catch (IOException e) {
 				System.err.println("IOException: I/O error occured while error simulator waiting to recieve message");
 				e.printStackTrace();
 				System.exit(1);
 			}
 
-			(new Thread(new ClientServerConnection(request, errorSim))).start();
+			//inform the file transfer thread if we need to add artificial errors
+			if(errorSim.packetLostError || errorSim.packetDuplicateError){
+				//create a client server connection with added errors
+				(new Thread(new ClientServerConnection(request, errorSim, errorSim.packetDuplicateError, 
+						errorSim.packetLostError, errorSim.errorOpCode, errorSim.errorBlockNumber))).start();
+			}else{
+				//create a client server connection without added errors
+				(new Thread(new ClientServerConnection(request, errorSim))).start();
+			}
 		}
 	}
 }
