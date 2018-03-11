@@ -256,6 +256,11 @@ public class ServerSpawnThread implements Runnable {
 						System.exit(1);
 					}
 				} while (keepReceiving && numTimeouts < 3);
+
+				if (numTimeouts >= 3) {//We've given up trying to receive, exit this loop
+					System.err.println("Timed out indefinitely. Total time waited: " + (TIMEOUT_MILLISECONDS * 3)/1000 + " seconds");
+					break;
+				}
 				//extract ACK data
 				ACKDatagram = receivePacket;
 				ACKData = ACKDatagram.getData();
@@ -278,7 +283,7 @@ public class ServerSpawnThread implements Runnable {
 					keepReceiving = true;
 				}
 
-			} while(keepReceiving && numTimeouts < 3);
+			} while(keepReceiving);
 
 			//Exit when the final ACK is received. If we reach here, the received ACK has been dealt with.
 			// Just check that last packet has been sent.

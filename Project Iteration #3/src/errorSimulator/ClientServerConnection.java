@@ -104,10 +104,19 @@ public class ClientServerConnection implements Runnable {
 		//get meaningful portion of message
 		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());		
 
-		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
-		System.out.println("Message length: " + packet.getLength());
-		System.out.println("Containing: " + new String(dataAsByteArray));
-		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
+		//System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
+		//System.out.println("Message length: " + packet.getLength());
+		System.out.print("Type: ");
+		switch(dataAsByteArray[1]) {
+			case 1: System.out.println("RRQ"); break;
+			case 2: System.out.println("WRQ"); break;
+			case 3: System.out.println("DATA"); break;
+			case 4: System.out.println("ACK"); break;
+			case 5: System.out.println("ERROR"); break;
+		}
+		System.out.println("Number " + (int)dataAsByteArray[3]);
+		//System.out.println("Containing: " + new String(dataAsByteArray));
+		//System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
 	}
 
 	/**
@@ -230,7 +239,7 @@ public class ClientServerConnection implements Runnable {
 					((errorOpCode == OP_DATA && messageData[1] == OP_DATA && 1 == errorBlockNumber) ||
 							(errorOpCode == OP_ACK && messageData[1] == OP_ACK && 1 == errorBlockNumber))){
 				createLostError = false;
-				System.out.println("Destroyed packet");
+				System.err.println("Destroyed packet");
 
 			} else {
 				//create packet to send resposne to client
@@ -253,7 +262,10 @@ public class ClientServerConnection implements Runnable {
 			if(connectionOpCode == OP_RRQ)
 				filetransfers += 1;
 
-			boolean destroyLastDataReceived = false;
+			boolean tamperedOneOfLastTwoPackets = false; //Indicates that it destroyed the last packet received so it should keep running.
+			final int COOLDOWN_PACKETS = 2;
+			int tamperPacketCooldown = COOLDOWN_PACKETS;
+
 			while(true) {
 
 				if(messageData[1] == OP_ERROR)
@@ -267,8 +279,9 @@ public class ClientServerConnection implements Runnable {
 				//get meaningful portion of message
 				messageData = Arrays.copyOf(response.getData(), response.getLength());
 
-				if (messageData[1] == OP_DATA) //stop error simulator from stopping when there is still data to be sent.
-					destroyLastDataReceived = false; //This indicates that it destroyed the last DATA (size < max) so it should keep running.
+				tamperPacketCooldown -= 1;
+				if (tamperPacketCooldown == 0)
+					tamperedOneOfLastTwoPackets = false;
 
 				//print response received
 				printMessageRecieved(response);
@@ -279,7 +292,8 @@ public class ClientServerConnection implements Runnable {
 								(errorOpCode == OP_ACK && messageData[1] == OP_ACK && (filetransfers/2) == errorBlockNumber))){
 					createLostError = false;
 					System.err.println("Destroyed packet");
-					destroyLastDataReceived = true;
+					tamperedOneOfLastTwoPackets = true;
+					tamperPacketCooldown = COOLDOWN_PACKETS;
 					continue;
 				}
 
@@ -307,6 +321,8 @@ public class ClientServerConnection implements Runnable {
 
 					(new Thread(new PacketDelayRunnable(sendPacket, sendRecieveSocket, packetDelayTime))).start();
 					createDuplicateError = false;
+					tamperedOneOfLastTwoPackets = true;
+					tamperPacketCooldown = COOLDOWN_PACKETS;
 				}
 
 				//create packet to send to recipient
@@ -326,6 +342,8 @@ public class ClientServerConnection implements Runnable {
 								(errorOpCode == OP_ACK && messageData[1] == OP_ACK && (filetransfers/2) == errorBlockNumber))){
 					(new Thread(new PacketDelayRunnable(sendPacket ,sendRecieveSocket, packetDelayTime))).start();
 					createPacketDelay = false;
+					tamperedOneOfLastTwoPackets = true;
+					tamperPacketCooldown = COOLDOWN_PACKETS;
 					continue;
 				}
 
@@ -334,15 +352,18 @@ public class ClientServerConnection implements Runnable {
 				System.out.println("Error simulator sent message to " + recipient);
 
 				//exit when the final packet is sent from the server
-				if((previousResponse.getLength() < MAX_PACKET_SIZE && previousResponse.getData()[1] != OP_ACK && !destroyLastDataReceived &&
-						((connectionOpCode == OP_RRQ   && portToSendPacket == serverPort) ||
-								(connectionOpCode == OP_WRQ && portToSendPacket == clientPort))) ||
-						messageData[1] == OP_ERROR){
+				if (connectionOpCode == OP_RRQ && previousResponse.getData()[1] == OP_DATA && previousResponse.getLength() < MAX_PACKET_SIZE
+						&& !tamperedOneOfLastTwoPackets && response.getData()[1] == OP_ACK) {
 					break;
 				}
+				if (connectionOpCode == OP_WRQ && previousResponse.getData()[1] == OP_ACK && response.getData()[1] == OP_DATA
+						&& response.getLength() < MAX_PACKET_SIZE && !tamperedOneOfLastTwoPackets) {
+					break;
+				}
+
 				filetransfers++;
 			}
-			System.out.println("client server connection thread finish.");
+			System.out.println("Client server connection thread finished.");
 		}
 	}
 

@@ -313,8 +313,8 @@ public class Client {
 
 		do {
 			keepReceiving = true;
-			while (keepReceiving && numTimeouts < 3) { //received a packet, but packet was found not valid
-				while (keepReceiving && numTimeouts < 3) { //did not receive a packet, resend previous packet
+			do { //received a packet, but packet was found not valid
+				do { //did not receive a packet, resend previous packet
 					try {
 						System.out.println("Client: waiting for acknowledge");
 						sendReceiveSocket.receive(receivePacket);
@@ -328,7 +328,13 @@ public class Client {
 						e.printStackTrace();
 						System.exit(1);
 					}
+				} while (keepReceiving && numTimeouts < 3);
+
+				if (numTimeouts >= 3) {
+					System.err.println("Timed out indefinitely. Time waited: " + (TIMEOUT_MILLISECONDS * 3)/1000 + " seconds");
+					break;
 				}
+
 				//extract ACK data
 				ACKData = receivePacket.getData();
 				int receivedBlockNumber = extractBlockNumber(ACKData);
@@ -347,7 +353,7 @@ public class Client {
 					System.err.println("Error: ACK block number does not match sent block number.");
 					keepReceiving = true;
 				}
-			}
+			}while (keepReceiving);
 			if(response != null && response.getLength() < MAX_PACKET_SIZE)
 				break;
 
@@ -476,7 +482,7 @@ public class Client {
 		//current block number of DATA
 		int blockNumber = 0;
 		//the data contained in the response datagram
-		byte[] serverResponseData;
+		byte[] serverResponseData = new byte[0];
 		//buffer to store what has been received so far
 		List<Byte> responseBuffer = new ArrayList<>();
 
@@ -506,6 +512,10 @@ public class Client {
 					}
 				} while (keepReceiving && numTimeouts < 3);
 
+				if (numTimeouts >= 3) {
+					System.err.println("Timed out indefinitely. Total time waited: " + (TIMEOUT_MILLISECONDS * 3)/1000 + " seconds");
+					break;
+				}
 				//print information in message received
 				System.out.println("Client: received packet");
 				printPacketInfo(receivePacket);
@@ -520,7 +530,7 @@ public class Client {
 					System.err.println("Error during file read: unexpected packet format.");
 					keepReceiving = true;
 				}
-			} while (keepReceiving && numTimeouts < 3);
+			} while (keepReceiving);
 			//get block number
 			blockNumber = extractBlockNumber(serverResponseData);
 
