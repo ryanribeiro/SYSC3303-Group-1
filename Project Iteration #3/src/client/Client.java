@@ -232,7 +232,7 @@ public class Client {
 				} else
 					System.out.println("File read failed.");
 			}else if(command.equalsIgnoreCase("write") && filenameGiven)
-				client.writeRequest(filename);
+				client.sendData(filename);
 			else if(command.equalsIgnoreCase("help"))
 				client.printHelpMenu();
 			else if(input.length > 2)
@@ -267,37 +267,23 @@ public class Client {
 	}
 
 	/**
-	 * performs a file write to the server
+	 * Sends the contents of a file to the server during a write request.
 	 *
-	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
-	 * @param filename the name of the file being written to the server
+	 * @param filename the text to send in the file
+	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton, CRushton
 	 */
-	private void writeRequest(String filename){
+	private void sendData(String filename){
+
 		//create WRQ data
 		byte[] WRQData = createPacketData(filename, MODE, OP_WRQ);
 		//create WRQ
 		DatagramPacket WRQDatagram = new DatagramPacket(WRQData, WRQData.length,
 				serverInetAddress, INTERMEDIATE_HOST_PORT_NUMBER);
 
-		//send WRQ
-		sendMessage(WRQDatagram);
-
 		//read in the specified file
-		byte[] fileData = readFile(filename);
-		String fileText = new String(fileData);
+		String fileText = new String(readFile(filename));
 		System.out.println("\nFile to send:\n" + fileText + "\n");
 
-		//transfer file to client
-		sendData(fileText);
-	}
-
-	/**
-	 * Sends the contents of a file to the server during a write request.
-	 *
-	 * @param fileText the text to send in the file
-	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton, CRushton
-	 */
-	private void sendData(String fileText){
 		//split file text into chunks for transfer
 		byte[][] fileData = splitByteArray(fileText.getBytes());
 
@@ -311,7 +297,14 @@ public class Client {
 		int numTimeouts = 0;
 		//get ACK packet
 
+		response = WRQDatagram;
 		do {
+			//send datagram
+			sendMessage(response);
+
+			if (response.getData()[1] == OP_DATA && response.getLength() < MAX_PACKET_SIZE) //Sent last DATA. Dont look for ACK
+				break;
+
 			keepReceiving = true;
 			do { //received a packet, but packet was found not valid
 				do { //did not receive a packet, resend previous packet
@@ -354,8 +347,6 @@ public class Client {
 					keepReceiving = true;
 				}
 			}while (keepReceiving);
-			if(response != null && response.getLength() < MAX_PACKET_SIZE)
-				break;
 
 			//update block number
 			blockNumber++;
@@ -376,9 +367,6 @@ public class Client {
 			//create data datagram
 			response = new DatagramPacket(serverResponseData, serverResponseData.length,
 					serverInetAddress, serverPort);
-
-			//send datagram
-			sendMessage(response);
 
 		}while(true);
 	}
