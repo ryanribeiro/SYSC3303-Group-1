@@ -7,11 +7,7 @@
 package errorSimulator;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.util.Arrays;
 
 /**
@@ -70,6 +66,7 @@ public class ClientServerConnection implements Runnable {
 		} catch (SocketException e) {
 			e.printStackTrace();
 		}
+
 		this.errorSim = errorSim;
 		this.createDuplicateError = false;
 		this.createLostError = false;
@@ -107,10 +104,19 @@ public class ClientServerConnection implements Runnable {
 		//get meaningful portion of message
 		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());		
 
-		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
-		System.out.println("Message length: " + packet.getLength());
-		System.out.println("Containing: " + new String(dataAsByteArray));
-		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
+		//System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
+		//System.out.println("Message length: " + packet.getLength());
+		System.out.print("Type: ");
+		switch(dataAsByteArray[1]) {
+			case 1: System.out.println("RRQ"); break;
+			case 2: System.out.println("WRQ"); break;
+			case 3: System.out.println("DATA"); break;
+			case 4: System.out.println("ACK"); break;
+			case 5: System.out.println("ERROR"); break;
+		}
+		System.out.println("Number " + (int)dataAsByteArray[3]);
+		//System.out.println("Containing: " + new String(dataAsByteArray));
+		//System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
 	}
 
 	/**
@@ -119,7 +125,7 @@ public class ClientServerConnection implements Runnable {
 	 * @author Luke Newton
 	 * @return returns the receive datagram packet
 	 */
-	private DatagramPacket waitReceiveMessage(){
+	private DatagramPacket waitReceiveMessage() {
 		recievePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
 		try {
 			sendRecieveSocket.receive(recievePacket);
@@ -137,7 +143,7 @@ public class ClientServerConnection implements Runnable {
 	 * @author Luke Newton
 	 * @param message	the datagram packet to send
 	 */
-	public void sendMessage(DatagramPacket message){
+	private void sendMessage(DatagramPacket message){
 		try {
 			sendRecieveSocket.send(message);
 		} catch (IOException e) {
@@ -165,7 +171,7 @@ public class ClientServerConnection implements Runnable {
 			messageData = Arrays.copyOf(request.getData(), request.getLength());		
 			clientPort = request.getPort();
 
-			//print data received from client
+			//print data received from client. Got this packet from parent ErrorSimulator.
 			printMessageRecieved(request);
 
 			//create packet to send request to server on specified port
@@ -183,7 +189,7 @@ public class ClientServerConnection implements Runnable {
 			printMessageToSend(sendPacket);
 			
 			//delay RRQ/WRQ
-			if(createPacketDelay&& ((errorOpCode == OP_WRQ && connectionOpCode == OP_WRQ) 
+			if(createPacketDelay && ((errorOpCode == OP_WRQ && connectionOpCode == OP_WRQ)
 					|| (errorOpCode == OP_RRQ && connectionOpCode == OP_RRQ))){
 				(new Thread(new PacketDelayRunnable(sendPacket, sendRecieveSocket, packetDelayTime))).start();
 				createPacketDelay = false;
@@ -192,7 +198,6 @@ public class ClientServerConnection implements Runnable {
 				sendMessage(sendPacket);
 				System.out.println("Error simulator sent message to server");
 			}
-			
 
 			//wait to receive response from server
 			System.out.println("Error simulator waiting on response from server...");
@@ -220,46 +225,64 @@ public class ClientServerConnection implements Runnable {
 					e.printStackTrace();
 					System.exit(1);
 				}
+				(new Thread(new PacketDelayRunnable(sendPacket, sendRecieveSocket, packetDelayTime))).start();
 				//print data to send to server
 				printMessageToSend(sendPacket);
-				//send message to server
-				sendMessage(sendPacket);
+
 				//wait for server reponse
 				response = waitReceiveMessage();
 
 				createLostError = false;
 			}
+			//lose DATA or lose ACK
+			if(createLostError &&
+					((errorOpCode == OP_DATA && messageData[1] == OP_DATA && 1 == errorBlockNumber) ||
+							(errorOpCode == OP_ACK && messageData[1] == OP_ACK && 1 == errorBlockNumber))){
+				createLostError = false;
+				System.err.println("Destroyed packet");
 
-			//create packet to send resposne to client
-			try {
-				sendPacket = new DatagramPacket(messageData, messageData.length,
-						InetAddress.getLocalHost(), clientPort);
-			} catch (UnknownHostException e) {
-				//failed to determine the host IP address
-				System.err.println("UnknownHostException: could not determine IP address of host while creating packet.");
-				e.printStackTrace();
-				System.exit(1);
+			} else {
+				//create packet to send resposne to client
+				try {
+					sendPacket = new DatagramPacket(messageData, messageData.length,
+							InetAddress.getLocalHost(), clientPort);
+				} catch (UnknownHostException e) {
+					//failed to determine the host IP address
+					System.err.println("UnknownHostException: could not determine IP address of host while creating packet.");
+					e.printStackTrace();
+					System.exit(1);
+				}
+
+				//send datagram to client
+				sendMessage(sendPacket);
+				System.out.println("Error simulator sent message to client");
 			}
-
-			//send datagram to client
-			sendMessage(sendPacket);
-			System.out.println("Error simulator sent message to client");
-
 			//a DATA/ACK pair represents on  complete packet transfer
 			int filetransfers = 1;
 			if(connectionOpCode == OP_RRQ)
 				filetransfers += 1;
-			while(true){
+
+			boolean tamperedOneOfLastTwoPackets = false; //Indicates that it destroyed the last packet received so it should keep running.
+			final int COOLDOWN_PACKETS = 2;
+			int tamperPacketCooldown = COOLDOWN_PACKETS;
+
+			while(true) {
+
 				if(messageData[1] == OP_ERROR)
 					break;
 				//copy previous message
 				previousResponse = response;
 				//get next message
-				System.out.println("Error simulator waiting on for response...");
+				System.out.println("Error simulator waiting for response...");
 				response = waitReceiveMessage();
-				
+
 				//get meaningful portion of message
 				messageData = Arrays.copyOf(response.getData(), response.getLength());
+
+				tamperPacketCooldown -= 1;
+				if (tamperPacketCooldown == 0)
+					tamperedOneOfLastTwoPackets = false;
+
 				//print response received
 				printMessageRecieved(response);
 				
@@ -268,32 +291,17 @@ public class ClientServerConnection implements Runnable {
 						((errorOpCode == OP_DATA && messageData[1] == OP_DATA && (filetransfers/2 + 1) == errorBlockNumber) || 
 								(errorOpCode == OP_ACK && messageData[1] == OP_ACK && (filetransfers/2) == errorBlockNumber))){
 					createLostError = false;
+					System.err.println("Destroyed packet");
+					tamperedOneOfLastTwoPackets = true;
+					tamperPacketCooldown = COOLDOWN_PACKETS;
 					continue;
 				}
 
 				int portToSendPacket = 0;
 				String recipient = "";
-				
-				//duplicate DATA and ACK packets
-				if(createDuplicateError &&
-						((errorOpCode == OP_DATA && messageData[1] == OP_ACK && (filetransfers/2) == errorBlockNumber) || 
-								(errorOpCode == OP_ACK && messageData[1] == OP_DATA && ((filetransfers)/2) == errorBlockNumber))){
-					//resend previous message
-					messageData = Arrays.copyOf(previousResponse.getData(), previousResponse.getLength());
-					if(response.getPort() == clientPort){
-						//send to server
-						portToSendPacket = clientPort;
-						recipient = "client";
-					} else {
-						//send to client
-						serverPort = response.getPort();
-						portToSendPacket = serverPort;
-						recipient = "server";
-					}
-					createDuplicateError = false;
-				}
+
 				//normal operations to determine who to send packet to
-				else if(response.getPort() == clientPort){
+				if(response.getPort() == clientPort){
 					//send to server
 					portToSendPacket = serverPort;
 					recipient = "server";
@@ -302,6 +310,19 @@ public class ClientServerConnection implements Runnable {
 					serverPort = response.getPort();
 					portToSendPacket = clientPort;
 					recipient = "client";
+				}
+
+				//duplicate DATA and ACK packets
+				if(createDuplicateError &&
+						((errorOpCode == OP_DATA && messageData[1] == OP_ACK && (filetransfers/2) == errorBlockNumber) ||
+								(errorOpCode == OP_ACK && messageData[1] == OP_DATA && ((filetransfers)/2) == errorBlockNumber))){
+					//resend previous message
+					messageData = Arrays.copyOf(previousResponse.getData(), previousResponse.getLength());
+
+					(new Thread(new PacketDelayRunnable(sendPacket, sendRecieveSocket, packetDelayTime))).start();
+					createDuplicateError = false;
+					tamperedOneOfLastTwoPackets = true;
+					tamperPacketCooldown = COOLDOWN_PACKETS;
 				}
 
 				//create packet to send to recipient
@@ -321,6 +342,8 @@ public class ClientServerConnection implements Runnable {
 								(errorOpCode == OP_ACK && messageData[1] == OP_ACK && (filetransfers/2) == errorBlockNumber))){
 					(new Thread(new PacketDelayRunnable(sendPacket ,sendRecieveSocket, packetDelayTime))).start();
 					createPacketDelay = false;
+					tamperedOneOfLastTwoPackets = true;
+					tamperPacketCooldown = COOLDOWN_PACKETS;
 					continue;
 				}
 
@@ -329,15 +352,18 @@ public class ClientServerConnection implements Runnable {
 				System.out.println("Error simulator sent message to " + recipient);
 
 				//exit when the final packet is sent from the server
-				if((previousResponse.getLength() < MAX_PACKET_SIZE && previousResponse.getData()[1] != OP_ACK &&
-						((connectionOpCode == OP_RRQ   && portToSendPacket == serverPort) ||
-								(connectionOpCode == OP_WRQ && portToSendPacket == clientPort))) ||
-						messageData[1] == OP_ERROR){
+				if (connectionOpCode == OP_RRQ && previousResponse.getData()[1] == OP_DATA && previousResponse.getLength() < MAX_PACKET_SIZE
+						&& !tamperedOneOfLastTwoPackets && response.getData()[1] == OP_ACK) {
 					break;
 				}
+				if (connectionOpCode == OP_WRQ && previousResponse.getData()[1] == OP_ACK && response.getData()[1] == OP_DATA
+						&& response.getLength() < MAX_PACKET_SIZE && !tamperedOneOfLastTwoPackets) {
+					break;
+				}
+
 				filetransfers++;
 			}
-			System.out.println("client server connection thread finish.");
+			System.out.println("Client server connection thread finished.");
 		}
 	}
 

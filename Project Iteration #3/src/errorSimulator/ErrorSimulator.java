@@ -98,7 +98,7 @@ public class ErrorSimulator {
 	 * @throws IOException indicated an I/O error has occurred
 	 * @return returns the receive datagram packet
 	 */
-	public DatagramPacket waitRecieveClientMessage() throws IOException{
+	private DatagramPacket waitRecieveClientMessage() throws IOException{
 		recieveSocket.receive(recievePacket);
 		//get the port number from the sender (client) to send response
 		clientPort = recievePacket.getPort();
@@ -147,10 +147,11 @@ public class ErrorSimulator {
 	 * 
 	 * @param b boolean indicating whether further data transfers will have a duplicate 
 	 * packet error to handle
-	 * @author Luke Newton
+	 * @author Luke Newton, CRushton
 	 */
-	public void setPacketDuplicate(boolean b) {
+	public void setPacketDuplicate(boolean b, int millis) {
 		this.packetDuplicateError = b;
+		this.packetDelayTime = millis;
 	}
 
 
