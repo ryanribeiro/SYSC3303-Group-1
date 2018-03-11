@@ -5,8 +5,14 @@ Client.java:
 	represents the client in the system.
 ErrorSimulator.java: 
 	represents the intermediate host in the system.
+ErrorSimMenuRunnable.java
+	runs the main menu that takes input from the user.
 ServerClientConnection.java
 	represents a connection between a client and server for data transfer. spawned by error simulator.
+InvalidCommandException.java
+	menu invalid command exception
+PacketDelayRunnable.java
+	delays and then sends a packet while error sim thread still runs.
 Server.java:
 	represents the server in the system.
 ServerSpawnThread.java
@@ -25,14 +31,15 @@ Open the project in Eclipse and run each in the following order:
 1. Server.java (in server package)
 2. ErrorSimulator.java (in errorSimulator package)
 3. Client.java (in client package)
-NOTE: By default, each program will timeout after 5 seconds of waiting for a message, so programs must
-be opened in rapid succession (or see section below for how to disable timeouts)
 
-**please ensure that your project folder has a folder called "SERVERDATA". This represents a seperate memeory space for the server while
-both the client and server are on the same machines**
+**please ensure that your project folder has a folder called "SERVERDATA". This represents a seperate memeory space for the server while both the client and server are on the same machines**
 
 You should see a startup message for each program when it runs. The client program will ask you if you would like to make a read request or a write request. To make a request, type <request> <file name> and hit enter. For example, to make a read request from the server, type "read test.txt". Once the transfer is complete, you may save the file under a new name. The client will then prompt you for another command. You may type "quit" to shut down the client and also type "quit" to shut down the server. The drop down next to the option "Display selected Console" in the top right corner of the console window will allow you to switch between the console outputs for the client, server, and ErrorSimulator. Additional consoles can be opened with the "Open Console" option in the top right corner of the  console by selecting "Open Console" -> "3 New Console View" to view multiple
 outputs at once.
+
+The error simulator will prompt you to enter a mode to simulate errors. You can choose to enter a mode before executing commands on the client or not entering a mode for normal operation. After a file operation you may change the mode to alter the behaviour of the next transfer. The menu has four options: normal operation, lose packet, delay packet and duplicate packet. To run normally without transfer errors, type "normal" in the error simulator when prompted for a command. To introduce errors, the following format is generally used: <command> <packet type> <packet number> <delay in milliseconds>. Since there is no delay in a lose packet request, if DATA packet 3 is to be lost, type "lose DATA 3" and hit enter. This can be done for WRQ, RRQ, ACK and DATA packet types. Delay and duplicate both have a delay parameter, so to delay the request, type "delay RRQ 2000". You can also type "delay ACK 1 5000" to delay an ACK or DATA packet since request packets don't have a number associated with them. Similarily, you can write "duplicate WRQ 1000" where the WRQ duplicate will be sent after waiting one second after the original WRQ has been sent.
+Note: Client and server have a total timeout time >=15 seconds each (3 timeout/retransmits of 5 seconds each), so delaying a packet for longer than this will result in one or both dropping the transfer entirely.
+If the last packet is to be destroyed, it will not be resent, but the recipient should timeout gracefully.
 
 ----------------------------------
 EDITING PARAMETERS OF THE PROGRAMS
@@ -120,24 +127,26 @@ Simulated by trying to write to the server with a file name that already exists.
 --------------------------
 Responsibilities breakdown
 --------------------------
+*It was found that fixing one error also fixed the other errors, so it worked out better to have one person do the writing for errors handling.
+
 Cameron:
-- Reviewing/merging 
-- Disk full error
+- Error handling code
 
 Kevin:
-- File not found error
+- Timing diagrams
+- Code review/suggestions with focus on duplicate packets
 
 Luke:
-- Fixing errors from iteration 1
-- Timing diagrams
+- Error simulator rewrite to create errors
+- Code review/suggestions
 
 Ryan:
-- Access violation error
-- Bug fixing / adding a print out for the error messages received in error packets
+- Code review/Suggestions with focus on duplicate packets
+- Bug fixing
 
 Joe:
-- File already exists error
-- UML diagrams and javadoc
+- Code review/suggestions with focus on lost and delayed packets
+- Bug fixing
 	
 ---------------
 DESIGN CHOICES
