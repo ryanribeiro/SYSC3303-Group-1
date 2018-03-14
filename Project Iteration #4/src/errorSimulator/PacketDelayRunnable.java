@@ -6,7 +6,6 @@ package errorSimulator;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.SocketException;
 
 /**
  * used to artificailly send a message after a specified time

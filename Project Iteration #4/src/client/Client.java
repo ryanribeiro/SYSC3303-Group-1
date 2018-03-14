@@ -281,11 +281,9 @@ public class Client {
 				serverInetAddress, INTERMEDIATE_HOST_PORT_NUMBER);
 
 		//read in the specified file
+		byte[][] fileData = splitByteArray(readFile(filename));
 		String fileText = new String(readFile(filename));
 		System.out.println("\nFile to send:\n" + fileText + "\n");
-
-		//split file text into chunks for transfer
-		byte[][] fileData = splitByteArray(fileText.getBytes());
 
 		/*transfer file to server*/
 		DatagramPacket response = null;
