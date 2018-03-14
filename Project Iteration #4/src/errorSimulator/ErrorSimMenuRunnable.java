@@ -76,7 +76,6 @@ public class ErrorSimMenuRunnable implements Runnable{
 
 					//activate artificial error creation in error simulator
 					if(input[0].equalsIgnoreCase("duplicate")){
-
 						if(errorOpCode == OP_WRQ || errorOpCode == OP_RRQ)
 							errorSim.setPacketDuplicate(true, Integer.parseInt(input[2]));
 						else
@@ -94,7 +93,41 @@ public class ErrorSimMenuRunnable implements Runnable{
 						System.out.println("System set to insert artificial packet delay");	
 					}
 				} else if(input[0].equalsIgnoreCase("help")){
-					printHelpMenu();
+					if(input.length == 1)
+						printHelpMenu();
+					else if(input[1].equalsIgnoreCase("normal")){
+						System.out.println("\nFormat: normal\n"
+								+ "The command 'normal' sets the error simulator to it's default state, in which no artificial errors are produced.\n");
+					}else if(input[1].equalsIgnoreCase("duplicate")){
+						System.out.println("\nFormat for RRQ/WRQ: duplicate <packet type> <milliseconds until duplicate sent>\n"
+								+ "Format for DATA/ACK: duplicate <packet type> <block number> <milliseconds until duplicate sent>\n"
+								+ "The command 'duplicate' will cause the error simulator to send a duplicate packet after a specified number of milliseconds.\n"
+								+ "The user specifies what type of packet they want to duplicate (RRQ, WRQ, DATA, or ACK),\n"
+								+ "and in the case of DATA or ACK, will specify which block number packet will be duplicated.\n"
+								+ "ex. 'duplicate rrq 500' will send a duplicate read request packet to the server afer 500 milliseconds (half a second)\n"
+								+ "ex2. 'duplicate data 15 1500' will send a duplicate of data block 15 after 1500 milliseconds\n");
+					}else if(input[1].equalsIgnoreCase("lose")){
+						System.out.println("\nFormat for RRQ/WRQ: lose <packet type>\n"
+								+ "Format for DATA/ACK: lose <packet type> <block number>\n"
+								+ "The command 'lose' will cause the error simulator to drop the specified packet.\n"
+								+ "The user specifies what type of packet they want to drop (RRQ, WRQ, DATA, or ACK),\n"
+								+ "and in the case of DATA or ACK, will specify which block number packet will be lost.\n"
+								+ "ex. 'lose wrq' will drop the first write request sent by a client\n"
+								+ "ex2. 'lose data 10' will drop the first data block 10 sent\n");
+					}else if(input[1].equalsIgnoreCase("delay")){
+						System.out.println("\nFormat for RRQ/WRQ: delay <packet type> <milliseconds packet delayed for>\n"
+								+ "Format for DATA/ACK: delay <packet type> <block number> <milliseconds packet delayed for>\n"
+								+ "The command 'delay' will cause the error simulator to delay a packet for a specified number of milliseconds.\n"
+								+ "The user specifies what type of packet they want to delay (RRQ, WRQ, DATA, or ACK),\n"
+								+ "and in the case of DATA or ACK, will specify which block number packet will be delayed.\n"
+								+ "ex. 'delay rrq 1000' will delay a read request packet to the server for 1000 milliseconds (one second)\n"
+								+ "ex2. 'delay ack 3 200' will delay the acknowledge for block 3 by 200 milliseconds\n");
+					}else if(input[1].equalsIgnoreCase("quit")){
+						System.out.println("\nFormat: quit\n"
+								+ "The command 'quit' will close the error simulator program.\n"
+								+ "Once terminated, files will not be able to be transferred between any running clients and the server until a new error simulator is run.\n"
+								+ "A message will be displayed indicating the the error simulator program has been terminated.\n");
+					}
 				}else if(input[0].equalsIgnoreCase("quit")){
 					break;
 				} else{
@@ -121,7 +154,7 @@ public class ErrorSimMenuRunnable implements Runnable{
 		System.out.println("type 'lose' followed by the type of packet to lose and packet number (if applicable) to insert a packet loss error");
 		System.out.println("type 'delay' followed by the type of packet to delay, pack number (if applicable), and milliseconds to delay for to insert a packet transfer delay");
 		System.out.println("type 'quit' to close the error simulator (will not allow for any further file transfers to take place)");
-		System.out.println("type 'help' to display this message again\n");
+		System.out.println("type 'help' to display this message again, or 'help' followed by any of the above command words for further decription.\n");
 	}
 
 }

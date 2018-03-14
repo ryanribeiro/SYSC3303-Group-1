@@ -199,7 +199,7 @@ public class Client {
 		String filename = "";
 		String[] input;
 		boolean filenameGiven;
-		while(!command.equalsIgnoreCase("quit")){
+		while(true){
 			System.out.print("Command: ");
 
 			/*receive user input*/
@@ -233,14 +233,38 @@ public class Client {
 					System.out.println("File read failed.");
 			}else if(command.equalsIgnoreCase("write") && filenameGiven)
 				client.sendData(filename);
-			else if(command.equalsIgnoreCase("help"))
-				client.printHelpMenu();
-			else if(input.length > 2)
+			else if(command.equalsIgnoreCase("help")){
+				if(input.length == 1)
+					client.printHelpMenu();
+				else if(input[1].equalsIgnoreCase("read")){
+					System.out.println("\nFormat: read <file name>\n"
+							+ "The command 'read' initiates a read request to the server.\n"
+							+ "A file name must be supplied corresponding to the file to read from the server\n"
+							+ "This file name must be a single word (no whitespaces) and include the file extension.\n"
+							+ "Once a file has been read from the server, the user will be prompted for a name to save the file as.\n"
+							+ "After the file has been saved to the client space, the user will be prompted for the next command.\n");
+				}else if(input[1].equalsIgnoreCase("write")){
+					System.out.println("\nFormat: write <file name>\n"
+							+ "The command 'write' initiates a write request to the server\n"
+							+ "A file name must be supplied corresponding to the file to read from the server\n"
+							+ "This file name must be a single word (no whitespaces) and include the file extension.\n"
+							+ "After the file has been written to the server, the user will be prompted for the next command.\n");
+				}else if(input[1].equalsIgnoreCase("quit")){
+					System.out.println("\nFormat: quit\n"
+							+ "The command 'quit' will close the current client program.\n"
+							+ "A quit command cannot be issued while any file transfer is in progress.\n"
+							+ "A message will be displayed indicating the the client program has been terminated.\n");
+				}else{
+					System.out.println("Invalid command! Type 'help' to check available commands");
+				}
+			}else if(command.equalsIgnoreCase("quit")){
+				break;
+			}else if(input.length > 2)
 				System.out.println("Invalid command! Too many arguments.");
 			else
 				System.out.println("Invalid command! Type 'help' to check available commands and remember to provide a file name if required");
 		}
-		System.out.println("Client shutting down...");
+		System.out.println("Client shut down due to command given");
 		scanner.close();
 		client.closeClientSocket();
 	}
@@ -574,11 +598,11 @@ public class Client {
 		System.out.println("Message length: " + packet.getLength());
 		System.out.print("Type: ");
 		switch(dataAsByteArray[1]) {
-			case 1: System.out.println("RRQ"); break;
-			case 2: System.out.println("WRQ"); break;
-			case 3: System.out.println("DATA"); break;
-			case 4: System.out.println("ACK"); break;
-			case 5: System.out.println("ERROR"); break;
+		case 1: System.out.println("RRQ"); break;
+		case 2: System.out.println("WRQ"); break;
+		case 3: System.out.println("DATA"); break;
+		case 4: System.out.println("ACK"); break;
+		case 5: System.out.println("ERROR"); break;
 		}
 		System.out.println("Containing: " + new String(dataAsByteArray));
 		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
@@ -593,6 +617,6 @@ public class Client {
 		System.out.println("type 'read' followed by a file name to begin a read request.");
 		System.out.println("type 'write' followed by a file name to begin a write request.");
 		System.out.println("type 'quit' to shutdown the client.");
-		System.out.println("type 'help' to display this message again.\n");
+		System.out.println("type 'help' to display this message again, or 'help' followed by any of the above command words for further decription.\n");
 	}
 }
