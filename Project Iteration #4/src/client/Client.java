@@ -49,6 +49,8 @@ public class Client {
 	private DatagramPacket receivePacket;
 	//the last packet sent out
 	private DatagramPacket lastPacketSent;
+	//indicates whether to print infor to display or not
+	private boolean quietMode;
 
 	/**Constructor
 	 * @throws SocketException indicates failed to create socket for client
@@ -63,6 +65,8 @@ public class Client {
 			e.printStackTrace();
 			System.exit(1);
 		}
+
+		quietMode = false;
 
 		//attempt to create socket for send and receive
 		sendReceiveSocket = new DatagramSocket();
@@ -106,7 +110,8 @@ public class Client {
 		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, serverInetAddress, receivePacket.getPort());
 
 		sendMessage(ACKDatagram);
-		System.out.println("sent acknowledgement to server");
+		if(!quietMode)
+			System.out.println("sent acknowledgement to server");
 	}
 
 
@@ -169,8 +174,10 @@ public class Client {
 			e.printStackTrace();
 			System.exit(1);
 		}
-		System.out.print("Sending packet \nTo: ");
-		printPacketInfo(message);
+		if(!quietMode){
+			System.out.print("Sending packet \nTo: ");
+			printPacketInfo(message);
+		}
 		lastPacketSent = message;
 	}
 
@@ -220,8 +227,10 @@ public class Client {
 
 				if(file != null){
 					//print the retreived file
-					System.out.println("File read from server:");
-					System.out.println(new String(file));
+					if(!client.quietMode){
+						System.out.println("File read from server:");
+						System.out.println(new String(file));
+					}
 
 					//get filename to save retreived file as
 					System.out.print("Enter name to save file as: ");
@@ -233,7 +242,13 @@ public class Client {
 					System.out.println("File read failed.");
 			}else if(command.equalsIgnoreCase("write") && filenameGiven)
 				client.sendData(filename);
-			else if(command.equalsIgnoreCase("help")){
+			else if(command.equalsIgnoreCase("quiet")){
+				client.quietMode = true;
+				System.out.println("quiet mode activated");
+			}else if(command.equalsIgnoreCase("verbose")){
+				client.quietMode = false;
+				System.out.println("verbose mode activated");
+			}else if(command.equalsIgnoreCase("help")){
 				if(input.length == 1)
 					client.printHelpMenu();
 				else if(input[1].equalsIgnoreCase("read")){
@@ -254,6 +269,13 @@ public class Client {
 							+ "The command 'quit' will close the current client program.\n"
 							+ "A quit command cannot be issued while any file transfer is in progress.\n"
 							+ "A message will be displayed indicating the the client program has been terminated.\n");
+				}else if(input[1].equalsIgnoreCase("quiet")){
+					System.out.println("\nFormat: quiet\n"
+							+ "The command 'quiet' will stop the client from displaying information on each packet sent and recieved.\n"
+							+ "In quiet mode, only errors will be displayed if they occur.\n");
+				}else if(input[1].equalsIgnoreCase("verbose")){
+					System.out.println("\nFormat: verbose\n"
+							+ "The command 'verbose' will cause the client to display information on each packet sent and recieved.\n");
 				}else{
 					System.out.println("Invalid command! Type 'help' to check available commands");
 				}
@@ -297,7 +319,6 @@ public class Client {
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton, CRushton
 	 */
 	private void sendData(String filename){
-
 		//create WRQ data
 		byte[] WRQData = createPacketData(filename, MODE, OP_WRQ);
 		//create WRQ
@@ -306,8 +327,10 @@ public class Client {
 
 		//read in the specified file
 		byte[][] fileData = splitByteArray(readFile(filename));
-		String fileText = new String(readFile(filename));
-		System.out.println("\nFile to send:\n" + fileText + "\n");
+		if(!quietMode){
+			String fileText = new String(readFile(filename));
+			System.out.println("\nFile to send:\n" + fileText + "\n");
+		}
 
 		/*transfer file to server*/
 		DatagramPacket response = null;
@@ -331,11 +354,13 @@ public class Client {
 			do { //received a packet, but packet was found not valid
 				do { //did not receive a packet, resend previous packet
 					try {
-						System.out.println("Client: waiting for acknowledge");
+						if(!quietMode)
+							System.out.println("Client: waiting for acknowledge");
 						sendReceiveSocket.receive(receivePacket);
 						keepReceiving = false;
 					} catch (SocketTimeoutException er) { //Timed out, resend previous packet
-						System.err.println("Timed out, resending last packet.");
+						if(!quietMode)
+							System.err.println("Timed out, resending last packet.");
 						numTimeouts += 1;
 						sendMessage(lastPacketSent);
 					} catch (IOException e) {
@@ -346,7 +371,8 @@ public class Client {
 				} while (keepReceiving && numTimeouts < 3);
 
 				if (numTimeouts >= 3) {
-					System.err.println("Timed out indefinitely. Time waited: " + (TIMEOUT_MILLISECONDS * 3)/1000 + " seconds");
+					if(!quietMode)
+						System.err.println("Timed out indefinitely. Time waited: " + (TIMEOUT_MILLISECONDS * numTimeouts)/1000 + " seconds");
 					break;
 				}
 
@@ -356,8 +382,10 @@ public class Client {
 				serverPort = receivePacket.getPort();
 
 				//print information in message received
-				System.out.println("Client: received packet");
-				printPacketInfo(receivePacket);
+				if(!quietMode){
+					System.out.println("Client: received packet");
+					printPacketInfo(receivePacket);
+				}
 
 				if (checkACK(receivePacket) < 0) {
 					keepReceiving = true;
@@ -365,7 +393,8 @@ public class Client {
 
 				//ensure we got an ACK matching the block number sent
 				if (receivedBlockNumber != blockNumber) {
-					System.err.println("Error: ACK block number does not match sent block number.");
+					if(!quietMode)
+						System.err.println("Error: ACK block number does not match sent block number.");
 					keepReceiving = true;
 				}
 			}while (keepReceiving);
@@ -410,11 +439,14 @@ public class Client {
 				for (int i = 4; ACKDatagram.getData()[i] != 0; i++) {
 					textStream.write(ACKDatagram.getData()[i]);
 				}
-				String errorMessage = textStream.toString();
-				System.err.println("\n" + errorMessage + "\n");
+				if(!quietMode){
+					String errorMessage = textStream.toString();
+					System.err.println("\n" + errorMessage + "\n");
+				}
 				return -1;
 			} else {
-				System.err.println("Error: expected ACK, received unknown message.");
+				if(!quietMode)
+					System.err.println("Error: expected ACK, received unknown message.");
 				return -2;
 			}
 		}
@@ -437,7 +469,6 @@ public class Client {
 		int stopIndex = 0;
 
 		for (int i = 0; i + MAX_BLOCK_SIZE <= dataLength; i += MAX_BLOCK_SIZE){
-			System.out.println(i);
 			stopIndex += MAX_BLOCK_SIZE;
 			result[resultIndex] = Arrays.copyOfRange(data, i, stopIndex);
 			resultIndex++;
@@ -508,7 +539,8 @@ public class Client {
 						sendReceiveSocket.receive(receivePacket);
 						keepReceiving = false;
 					} catch (SocketTimeoutException er) {
-						System.err.println("Timed out, waiting on another packet.");
+						if(!quietMode)
+							System.err.println("Timed out, waiting on another packet.");
 						numTimeouts += 1;
 						if (blockNumber == 0) { //if we need to send another RRQ
 							sendMessage(lastPacketSent);
@@ -523,11 +555,13 @@ public class Client {
 				} while (keepReceiving && numTimeouts < 3);
 
 				if (numTimeouts >= 3) {
-					System.err.println("Timed out indefinitely. Total time waited: " + (TIMEOUT_MILLISECONDS * 3)/1000 + " seconds");
+					if(!quietMode)
+						System.err.println("Timed out indefinitely. Total time waited: " + (TIMEOUT_MILLISECONDS * numTimeouts)/1000 + " seconds");
 					break;
 				}
 				//print information in message received
-				System.out.println("Client: received packet");
+				if(!quietMode)
+					System.out.println("Client: received packet");
 				printPacketInfo(receivePacket);
 
 				//get size of the message
@@ -537,7 +571,8 @@ public class Client {
 
 				//if we did not get a DATA packet, keep receiving
 				if (serverResponseData[1] != OP_DATA) {
-					System.err.println("Error during file read: unexpected packet format.");
+					if(!quietMode)
+						System.err.println("Error during file read: unexpected packet format.");
 					keepReceiving = true;
 				}
 			} while (keepReceiving);
@@ -553,7 +588,7 @@ public class Client {
 
 		} while(!isLastPacket(receivePacket) && numTimeouts < 3);
 
-		if (numTimeouts >= 3)
+		if (numTimeouts >= 3 && !quietMode)
 			System.err.println("Client timed out");
 
 		/*get final byte array from response buffer*/
@@ -591,6 +626,9 @@ public class Client {
 	 * @param packet DatagramPacket
 	 */
 	private void printPacketInfo(DatagramPacket packet) {
+		//if in quiet mode, do not print
+		if(quietMode)
+			return;
 		//get meaningful portion of message
 		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());
 
@@ -598,11 +636,11 @@ public class Client {
 		System.out.println("Message length: " + packet.getLength());
 		System.out.print("Type: ");
 		switch(dataAsByteArray[1]) {
-		case 1: System.out.println("RRQ"); break;
-		case 2: System.out.println("WRQ"); break;
-		case 3: System.out.println("DATA"); break;
-		case 4: System.out.println("ACK"); break;
-		case 5: System.out.println("ERROR"); break;
+		case OP_RRQ: System.out.println("RRQ"); break;
+		case OP_WRQ: System.out.println("WRQ"); break;
+		case OP_DATA: System.out.println("DATA"); break;
+		case OP_ACK: System.out.println("ACK"); break;
+		case OP_ERROR: System.out.println("ERROR"); break;
 		}
 		System.out.println("Containing: " + new String(dataAsByteArray));
 		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");
@@ -616,6 +654,8 @@ public class Client {
 	private void printHelpMenu() {
 		System.out.println("type 'read' followed by a file name to begin a read request.");
 		System.out.println("type 'write' followed by a file name to begin a write request.");
+		System.out.println("type 'quiet' to set the client to quiet file transfer mode");
+		System.out.println("type 'verbose' to set the client to verbose file transfer mode");
 		System.out.println("type 'quit' to shutdown the client.");
 		System.out.println("type 'help' to display this message again, or 'help' followed by any of the above command words for further decription.\n");
 	}
