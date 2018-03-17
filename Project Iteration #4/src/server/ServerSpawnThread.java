@@ -12,7 +12,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 
 /**
  * handles the processing of a single client request
@@ -135,14 +134,14 @@ public class ServerSpawnThread implements Runnable {
 	 * @return contents of the file read in
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton, Kevin Sun
 	 */
-	private String readFile(String filename) {
+	private byte[] readFile(String filename) {
 		Path path = Paths.get(filename);
 		System.out.println("Reading file named " + fileName);
 
 		try {
-			String fileContents = new String(Files.readAllBytes(path));
-			System.out.println("File contents to send:\n" + fileContents);
-			return fileContents;
+			byte[] fileData = Files.readAllBytes(path);
+			System.out.println("File contents to send:\n" + new String(Files.readAllBytes(path)));
+			return fileData;
 
 		} catch (IOException e) {
 			//sends error packet to client
@@ -168,13 +167,13 @@ public class ServerSpawnThread implements Runnable {
 	/**
 	 * Sends the contents of a file during a RRQ to the client through error sim.
 	 * 
-	 * @param fileText the file data to send
+	 * @param fileContents the file data to send
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 */
-	private void sendData(String fileText) {
+	private void sendData(byte[] fileContents) {
 
 		//split file text into chunks for transfer
-		byte[][] fileData = splitByteArray(fileText.getBytes());
+		byte[][] fileData = splitByteArray(fileContents);
 		//create socket to transfer file
 		DatagramSocket sendReceiveSocket = null;
 		try {

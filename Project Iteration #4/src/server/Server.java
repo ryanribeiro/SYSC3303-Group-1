@@ -188,7 +188,6 @@ public class Server {
 		Server server = null;
 		try {
 			server = new Server(SERVER_PORT_NUMBER);
-
 		} catch (SocketException e) {
 			System.err.println("SocketException: failed to create socket for server");
 			e.printStackTrace();
