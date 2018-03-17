@@ -86,7 +86,7 @@ public class Server {
 	 * 
 	 * @return true if server is shutting down, otherwise false
 	 */
-	public boolean isQuitTime() {
+	private boolean isQuitTime() {
 		return quitPreperation;
 	}
 
@@ -106,7 +106,7 @@ public class Server {
 	 * @author Luke Newton
 	 * @param request the message received to process
 	 */
-	public void newMessageToProcess(DatagramPacket request){
+	private void newMessageToProcess(DatagramPacket request){
 		System.out.println("Server: received message");
 		serverLogicThread = new Thread(new ServerSpawnThread(this, request)); 
 		//priorities are set low to make shutdown occur in a timely manner
@@ -158,7 +158,7 @@ public class Server {
 	 * @return the message received as a  DatagramPacket
 	 * @throws IOException indicated an I/O error has occurred
 	 */
-	public DatagramPacket waitReceiveMessage() throws IOException{
+	private DatagramPacket waitReceiveMessage() throws IOException{
 		receiveSocket.receive(receivePacket);
 		return receivePacket;
 	}

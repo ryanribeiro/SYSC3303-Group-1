@@ -286,6 +286,8 @@ public class ServerSpawnThread implements Runnable {
 
 			//Exit when the final ACK is received. If we reach here, the received ACK has been dealt with.
 			// Just check that last packet has been sent.
+			if (numTimeouts >= 3)
+				break;
 		} while(response.getLength() == MAX_PACKET_SIZE);
 		sendReceiveSocket.close();
 	}
