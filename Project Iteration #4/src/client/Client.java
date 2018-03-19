@@ -574,8 +574,19 @@ public class Client {
 					if(!quietMode)
 						System.err.println("Error during file read: unexpected packet format.");
 					keepReceiving = true;
+					//if the packet was error codes 1,2,3 or 6, stop thread
+					if (serverResponseData[1] == OP_ERROR && (serverResponseData[3] == 1 || serverResponseData[3] == 2
+						|| serverResponseData[3] == 3 || serverResponseData[3] == 6)) {
+						keepReceiving = false;
+						numTimeouts = 3;
+					}
 				}
+
+
 			} while (keepReceiving);
+			if (numTimeouts >= 3)
+				break;
+
 			//get block number
 			blockNumber = extractBlockNumber(serverResponseData);
 
@@ -586,7 +597,7 @@ public class Client {
 			//send acknowledgement to server (parameter passed is a conversion of int to byte[])
 			acknowledge(intToByteArray(blockNumber));
 
-		} while(!isLastPacket(receivePacket) && numTimeouts < 3);
+		} while(!isLastPacket(receivePacket));
 
 		if (numTimeouts >= 3 && !quietMode)
 			System.err.println("Client timed out");

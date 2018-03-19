@@ -27,17 +27,19 @@ public class ErrorSimulator {
 	private static final byte OP_ERROR = 5;
 
 	//socket for error simulator to send and receive packets
-	private DatagramSocket recieveSocket, sendRecieveSocket;
+	private DatagramSocket receiveSocket, sendReceiveSocket;
 	//buffer to contain data to send to server/client
-	private DatagramPacket recievePacket;
+	private DatagramPacket receivePacket;
 	//port number of client to send response to
 	private int clientPort;
-	//booleans indicating whether error types occur in a datatransfer
+	//booleans indicating whether error types occur in a data transfer
 	private volatile boolean packetLostError, packetDuplicateError, createPacketDelay;
-	//specifies which blcok number to cause error on (if applicable)
+	//specifies which block number to cause error on (if applicable)
 	private volatile int errorBlockNumber;
 	//specifies which type of packet to cause error on
 	private volatile int errorOpCode, packetDelayTime;
+	//indicates whether packet format is altered
+	private volatile boolean invalidModeError, invalidDataError, invalidBlockError, invalidOpcodeError;
 
 
 
@@ -48,15 +50,15 @@ public class ErrorSimulator {
 	 * @throws SocketException indicate failed to create socket for the error simulator
 	 */
 	public ErrorSimulator() throws SocketException{
-		recieveSocket = new DatagramSocket();
-		sendRecieveSocket = new DatagramSocket();
+		receiveSocket = new DatagramSocket();
+		sendReceiveSocket = new DatagramSocket();
 		//turn on timeout if required
 		if(TIMEOUTS_ON){
-			sendRecieveSocket.setSoTimeout(TIMEOUT_MILLISECONDS);
-			recieveSocket.setSoTimeout(TIMEOUT_MILLISECONDS);
+			sendReceiveSocket.setSoTimeout(TIMEOUT_MILLISECONDS);
+			receiveSocket.setSoTimeout(TIMEOUT_MILLISECONDS);
 		}
 		//create packet of max size to guarantee it fits a received message
-		recievePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
+		receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
 	}
 
 	/**
@@ -68,7 +70,7 @@ public class ErrorSimulator {
 	 */
 	public ErrorSimulator(int port) throws SocketException{
 		this();
-		recieveSocket = new DatagramSocket(port);
+		receiveSocket = new DatagramSocket(port);
 	}
 
 	/**
@@ -77,8 +79,8 @@ public class ErrorSimulator {
 	 *@author Luke Newton
 	 * @return  the data in the received packet 
 	 */
-	public byte[] getRecievePacketData(){
-		return recievePacket.getData();
+	public byte[] getReceivePacketData(){
+		return receivePacket.getData();
 	}
 
 	/**
@@ -98,12 +100,12 @@ public class ErrorSimulator {
 	 * @throws IOException indicated an I/O error has occurred
 	 * @return returns the receive datagram packet
 	 */
-	private DatagramPacket waitRecieveClientMessage() throws IOException{
-		recieveSocket.receive(recievePacket);
+	private DatagramPacket waitReceiveClientMessage() throws IOException{
+		receiveSocket.receive(receivePacket);
 		//get the port number from the sender (client) to send response
-		clientPort = recievePacket.getPort();
+		clientPort = receivePacket.getPort();
 
-		return recievePacket;
+		return receivePacket;
 	}
 
 	/**
@@ -113,20 +115,20 @@ public class ErrorSimulator {
 	 * @throws IOException indicated an I/O error has occurred
 	 * @return returns the receive datagram packet
 	 */
-	public DatagramPacket waitRecieveServerMessage() throws IOException{
-		sendRecieveSocket.receive(recievePacket);
-		return recievePacket;
+	public DatagramPacket waitReceiveServerMessage() throws IOException{
+		sendReceiveSocket.receive(receivePacket);
+		return receivePacket;
 	}
 
 	/**
-	 * sends a datagram through the error simulator's sendRecieveSocket
+	 * sends a datagram through the error simulator's sendReceiveSocket
 	 * 
 	 * @author Luke Newton
 	 * @param message	the datagram packet to send
 	 * @throws IOException indicates and I/O error occurred while sending a message
 	 */
 	public void sendMessage(DatagramPacket message) throws IOException{
-		sendRecieveSocket.send(message);
+		sendReceiveSocket.send(message);
 	}
 
 	/**
@@ -154,6 +156,41 @@ public class ErrorSimulator {
 		this.packetDelayTime = millis;
 	}
 
+	/**
+	 * Turn on modification of the opcode of a packet
+	 * @author CRushton
+	 * @param b boolean indicating if the opcode is to be invalidated
+	 */
+	public void setInvalidOpcode(boolean b) {
+		invalidOpcodeError = b;
+	}
+
+	/**
+	 * Turn on modification of the mode of a packet
+	 * @author CRushton
+	 * @param b boolean indicating if the mode is to be invalidated
+	 */
+	public void setInvalidMode(boolean b) {
+		invalidModeError = b;
+	}
+
+	/**
+	 * Turn on modification of the block number of a packet
+	 * @author CRushton
+	 * @param b boolean indicating if the block number is to be invalidated
+	 */
+	public void setInvalidBlock(boolean b) {
+		invalidBlockError = b;
+	}
+
+	/**
+	 * Turn on modification of the data of a packet
+	 * @author CRushton
+	 * @param b boolean indicating if the data is to be invalidated
+	 */
+	public void setInvalidData(boolean b) {
+		invalidDataError = b;
+	}
 
 	/**
 	 * Set the DATA block number to cause error on
@@ -213,28 +250,31 @@ public class ErrorSimulator {
 			try {
 				System.out.println("Error simulator waiting on request...");
 				
-				request = errorSim.waitRecieveClientMessage();
+				request = errorSim.waitReceiveClientMessage();
 				
 				int requestType = request.getData()[1];
 				
 				//create a packet loss for WRQ and RRQ
 				if(errorSim.packetLostError && ((errorSim.errorOpCode == OP_WRQ && requestType == OP_WRQ) 
 						|| (errorSim.errorOpCode == OP_RRQ && requestType == OP_RRQ))){
-					//dont send the first WRQ/RRQ recieved
-					request = errorSim.waitRecieveClientMessage();
+					//dont send the first WRQ/RRQ received
+					request = errorSim.waitReceiveClientMessage();
 				} 
 			} catch (IOException e) {
-				System.err.println("IOException: I/O error occured while error simulator waiting to recieve message");
+				System.err.println("IOException: I/O error occured while error simulator waiting to receive message");
 				e.printStackTrace();
 				System.exit(1);
 			}
 
 			//inform the file transfer thread if we need to add artificial errors
-			if(errorSim.packetLostError || errorSim.packetDuplicateError || errorSim.createPacketDelay){
+			if(errorSim.packetLostError || errorSim.packetDuplicateError || errorSim.createPacketDelay ||
+					errorSim.invalidDataError || errorSim.invalidBlockError || errorSim.invalidModeError ||
+					errorSim.invalidOpcodeError){
 				//create a client server connection with added errors
 				(new Thread(new ClientServerConnection(request, errorSim, errorSim.packetDuplicateError, 
 						errorSim.packetLostError, errorSim.createPacketDelay, errorSim.errorOpCode, 
-						errorSim.errorBlockNumber, errorSim.packetDelayTime))).start();
+						errorSim.errorBlockNumber, errorSim.packetDelayTime, errorSim.invalidModeError,
+						errorSim.invalidDataError, errorSim.invalidOpcodeError, errorSim.invalidBlockError))).start();
 			}else{
 				//create a client server connection without added errors
 				(new Thread(new ClientServerConnection(request, errorSim))).start();

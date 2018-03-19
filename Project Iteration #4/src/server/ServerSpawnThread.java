@@ -60,6 +60,7 @@ public class ServerSpawnThread implements Runnable {
 	private static final byte FILE_NOT_FOUND = 1;
 	private static final byte ACCESS_VIOLATION_CODE = 2;
 	private static final byte DISK_FULL_CODE = 3;
+	private static final byte ILLEGAL_TFTP_CODE = 4;
 	private static final byte FILE_ALREADY_EXISTS = 6;
 	
 	private InetAddress serverInetAddress = null;
@@ -117,9 +118,15 @@ public class ServerSpawnThread implements Runnable {
 				}
 			} catch (InvalidMessageFormatException e) {
 				System.out.println("InvalidMessageFormatException: a message received was of an invalid format");
-				e.printStackTrace();
+				//e.printStackTrace();
 				System.out.println("Invalid message Contents:");
 				printPacketInfo(receivePacket);
+				System.out.println("Sending Error code 4");
+				try {
+					createAndSendErrorPacket(ILLEGAL_TFTP_CODE, "Illegal packet format");
+				} catch (IOException er) {
+					System.err.println("Failed to send error packet");
+				}
 			}
 			server.messageProcessed();
 		}
