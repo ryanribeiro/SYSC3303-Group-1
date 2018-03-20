@@ -94,7 +94,6 @@ public class Client {
 		} catch (SecurityException se) {
 			System.out.println("Access violation while trying to write file from server.");
 			se.printStackTrace();
-			System.exit(1);
 		}
 	}
 
