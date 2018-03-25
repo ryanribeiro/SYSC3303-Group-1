@@ -61,6 +61,7 @@ public class ServerSpawnThread implements Runnable {
 	private static final byte ACCESS_VIOLATION_CODE = 2;
 	private static final byte DISK_FULL_CODE = 3;
 	private static final byte ILLEGAL_TFTP_CODE = 4;
+	private static final byte UNKNOWN_TRANSFER_ID = 5;
 	private static final byte FILE_ALREADY_EXISTS = 6;
 	
 	private InetAddress serverInetAddress = null;
@@ -546,6 +547,18 @@ public class ServerSpawnThread implements Runnable {
 	private void parseMessage() throws InvalidMessageFormatException {
 		byte[] messageData = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
 
+		//check if expected TID by checking that the server address and packet address are not the same, as well as the
+		//server port and the packet port
+		if (!(serverInetAddress.equals(receivePacket.getAddress()) && (server.getServerPort() == receivePacket.getPort()))) {
+			System.err.println("Unknown transfer ID of received packet.");
+			try {
+				createAndSendErrorPacket(UNKNOWN_TRANSFER_ID, "Unknown transfer ID of received packet.");
+			} catch (IOException er) {
+				System.err.println("Failed creating/sending error packet");
+				er.printStackTrace();
+			}
+		}
+		
 		//check first byte
 		if (messageData[0] != 0)
 			throw new InvalidMessageFormatException();

@@ -142,6 +142,15 @@ public class Server {
 	public byte[] getreceivePacketData(){
 		return receivePacket.getData();
 	}
+	
+	/**
+	 * returns the server port number
+	 * 
+	 * @return the server port number
+	 */
+	public int getServerPort() {
+		return SERVER_PORT_NUMBER;
+	}
 
 	/**
 	 * returns the port number of the latest client to send a message here
