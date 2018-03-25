@@ -124,13 +124,20 @@ Simulated using a small USB, filling it up with junk files, and then attempting 
 4) FileAlreadyExists
 Simulated by trying to write to the server with a file name that already exists.
 
+5) Handling incoming packets with unexpected formats
+Simulated using invalid command in the Error Simulator.
+
+6) Unkown transfer ID
+Implemented but not tested thoroughly using the Error Simulator.
+
+
 --------------------------
 Responsibilities breakdown
 --------------------------
 *It was found that fixing one error also fixed the other errors, so it worked out better to have one person do the writing for errors handling.
 
 Cameron:
-- Error handling code
+- Error handling code, packet unexpected formats.
 
 Kevin:
 - Timing diagrams
@@ -141,11 +148,11 @@ Luke:
 - Code review/suggestions
 
 Ryan:
-- Code review/Suggestions with focus on duplicate packets
+- Code review/Suggestions with focus on duplicate packets, incorrect TIDs, unexpected formats.
 - Bug fixing
 
 Joe:
-- Code review/suggestions with focus on lost and delayed packets
+- Code review/suggestions with focus on lost and delayed packets, error sim menu.
 - Bug fixing
 	
 ---------------
