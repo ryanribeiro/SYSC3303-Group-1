@@ -6,6 +6,7 @@
  */
 package errorSimulator;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.*;
 import java.util.Arrays;
@@ -114,8 +115,8 @@ public class ClientServerConnection implements Runnable {
 		//get meaningful portion of message
 		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());
 
-		//System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
-		//System.out.println("Message length: " + packet.getLength());
+		System.out.println("host: " + packet.getAddress() + ":" + packet.getPort());
+		System.out.println("Message length: " + packet.getLength());
 		System.out.print("Type: ");
 		switch(dataAsByteArray[1]) {
 			case OP_RRQ: System.out.println("RRQ"); break;
@@ -272,7 +273,16 @@ public class ClientServerConnection implements Runnable {
 						invalidBlockError = false;
 					}
 					if (invalidDataError && messageData[3] == errorBlockNumber) {
-						//TODO: Implement invalid data
+						//First 4 bytes are legal, but the DATA portion is going to be garbage and over 516 bytes
+						ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+						byteStream.write(messageData[0]);
+						byteStream.write(messageData[1]);
+						byteStream.write(messageData[2]);
+						byteStream.write(messageData[3]);
+						for (int i = 0; i <= MAX_PACKET_SIZE + 1; i++) {
+							byteStream.write(0);
+						}
+						messageData = byteStream.toByteArray();
 						invalidDataError = false;
 					}
 				}
@@ -367,10 +377,19 @@ public class ClientServerConnection implements Runnable {
 						tamperPacketCooldown = COOLDOWN_PACKETS;
 					}
 					if (invalidDataError && messageData[3] == errorBlockNumber) {
-						//TODO: Implement invalid data
+						//First 4 bytes are legal, but the DATA portion is going to be garbage and over 516 bytes
+						ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+						byteStream.write(messageData[0]);
+						byteStream.write(messageData[1]);
+						byteStream.write(messageData[2]);
+						byteStream.write(messageData[3]);
+						for (int i = 0; i <= MAX_PACKET_SIZE + 1; i++) {
+							byteStream.write(0);
+						}
+						messageData = byteStream.toByteArray();
 						invalidDataError = false;
-						//tamperedOneOfLastTwoPackets = true;
-						//tamperPacketCooldown = COOLDOWN_PACKETS;
+						tamperedOneOfLastTwoPackets = true;
+						tamperPacketCooldown = COOLDOWN_PACKETS;
 					}
 				}
 
