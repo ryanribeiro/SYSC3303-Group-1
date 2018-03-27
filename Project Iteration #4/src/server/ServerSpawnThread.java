@@ -65,6 +65,8 @@ public class ServerSpawnThread implements Runnable {
 	private static final byte FILE_ALREADY_EXISTS = 6;
 	
 	private InetAddress serverInetAddress = null;
+	private InetAddress Orig_address;
+	private int Orig_port;
 	/**
 	 * Constructor
 	 * 
@@ -546,18 +548,6 @@ public class ServerSpawnThread implements Runnable {
 	 */
 	private void parseMessage() throws InvalidMessageFormatException {
 		byte[] messageData = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
-
-		//check if expected TID by checking that the server address and packet address are not the same, as well as the
-		//server port and the packet port
-		if (!(serverInetAddress.equals(receivePacket.getAddress()) && (server.getServerPort() == receivePacket.getPort()))) {
-			System.err.println("Unknown transfer ID of received packet.");
-			try {
-				createAndSendErrorPacket(UNKNOWN_TRANSFER_ID, "Unknown transfer ID of received packet.");
-			} catch (IOException er) {
-				System.err.println("Failed creating/sending error packet");
-				er.printStackTrace();
-			}
-		}
 		
 		//check first byte
 		if (messageData[0] != 0)
@@ -573,7 +563,21 @@ public class ServerSpawnThread implements Runnable {
 		} else {
 			throw new InvalidMessageFormatException();
 		}
-
+		if (messageData[1] == OP_WRQ || messageData[1] == OP_RRQ) {
+			Orig_address = receivePacket.getAddress();
+			Orig_port = receivePacket.getPort();
+		}
+		//check if expected TID by checking that the server address and packet address are not the same, as well as the
+		//server port and the packet port
+		if (!(Orig_address.equals(receivePacket.getAddress()) && (Orig_port == receivePacket.getPort()))) {
+			System.err.println("Unknown transfer ID of received packet.");
+			try {
+				createAndSendErrorPacket(UNKNOWN_TRANSFER_ID, "Unknown transfer ID of received packet.");
+			} catch (IOException er) {
+				System.err.println("Failed creating/sending error packet");
+				er.printStackTrace();
+			}
+		}
 		int currentIndex = 2; //start at 2 to account for the first two bytes
 		//store names of file and mode in a stream
 		ByteArrayOutputStream textStream = new ByteArrayOutputStream();

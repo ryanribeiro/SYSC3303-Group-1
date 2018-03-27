@@ -95,7 +95,7 @@ public class Server {
 	 * 
 	 * @author Luke Newton
 	 */
-	public synchronized void setQuitTime() {
+	synchronized void setQuitTime() {
 			this.quitPreperation = true;
 			receiveSocket.close();	
 	}
@@ -120,7 +120,7 @@ public class Server {
 	 * 
 	 * @author Luke Newton
 	 */
-	public void messageProcessed(){
+	void messageProcessed(){
 		numberOfMessagesBeingProcessed--;
 	}
 
@@ -132,33 +132,6 @@ public class Server {
 	 */
 	private int getNumberOfMessagesBeingProcessed() {
 		return numberOfMessagesBeingProcessed;
-	}
-
-	/**
-	 *Return the data in the datagram packet received
-	 *
-	 * @return  the data in the datagram packet received
-	 */
-	public byte[] getreceivePacketData(){
-		return receivePacket.getData();
-	}
-	
-	/**
-	 * returns the server port number
-	 * 
-	 * @return the server port number
-	 */
-	public int getServerPort() {
-		return SERVER_PORT_NUMBER;
-	}
-
-	/**
-	 * returns the port number of the latest client to send a message here
-	 * 
-	 * @return the port number of the latest client to send a message here
-	 */
-	public int getClientPort(){
-		return clientPort;
 	}
 
 	/**
@@ -175,7 +148,7 @@ public class Server {
 	/**
 	 * pauses execution breiefly so output can be read as it is created
 	 */
-	public void pause(){
+	void pause(){
 		if(PAUSES_ON){
 			try {
 				Thread.sleep(PAUSE_MILLISECONDS);
