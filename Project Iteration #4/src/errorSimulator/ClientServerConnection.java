@@ -265,7 +265,6 @@ public class ClientServerConnection implements Runnable {
 				System.err.println("Destroyed packet");
 
 			} else {
-
 				//modify data or ack from server
 				if (errorOpCode == messageData[1]) {
 					if (invalidBlockError && messageData[3] == errorBlockNumber) { //change to 0 because there can never be a 0th block
@@ -279,9 +278,10 @@ public class ClientServerConnection implements Runnable {
 						byteStream.write(messageData[1]);
 						byteStream.write(messageData[2]);
 						byteStream.write(messageData[3]);
-						for (int i = 0; i <= MAX_PACKET_SIZE + 1; i++) {
+						for (int i = 0; i <= MAX_PACKET_SIZE; i++) {
 							byteStream.write(0);
 						}
+						byteStream.write(-9999);
 						messageData = byteStream.toByteArray();
 						invalidDataError = false;
 					}
@@ -296,7 +296,7 @@ public class ClientServerConnection implements Runnable {
 					e.printStackTrace();
 					System.exit(1);
 				}
-
+				printMessageToSend(sendPacket);
 				//send datagram to client
 				sendMessage(sendPacket);
 				System.out.println("Error simulator sent message to client");
@@ -340,7 +340,6 @@ public class ClientServerConnection implements Runnable {
 					tamperPacketCooldown = COOLDOWN_PACKETS;
 					continue;
 				}
-
 				int portToSendPacket = 0;
 				String recipient = "";
 
@@ -373,9 +372,8 @@ public class ClientServerConnection implements Runnable {
 					if (invalidBlockError && messageData[3] == errorBlockNumber) {
 						messageData[3] = -1; //-1 is an invalid block number
 						invalidBlockError = false;
-						tamperedOneOfLastTwoPackets = true;
-						tamperPacketCooldown = COOLDOWN_PACKETS;
 					}
+
 					if (invalidDataError && messageData[3] == errorBlockNumber) {
 						//First 4 bytes are legal, but the DATA portion is going to be garbage and over 516 bytes
 						ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
@@ -388,9 +386,9 @@ public class ClientServerConnection implements Runnable {
 						}
 						messageData = byteStream.toByteArray();
 						invalidDataError = false;
-						tamperedOneOfLastTwoPackets = true;
-						tamperPacketCooldown = COOLDOWN_PACKETS;
 					}
+					tamperedOneOfLastTwoPackets = true; //assuming one of the errors above will trigger & tamper packet
+					tamperPacketCooldown = COOLDOWN_PACKETS;
 				}
 
 				//create packet to send to recipient

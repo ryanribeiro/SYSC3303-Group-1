@@ -133,6 +133,7 @@ public class ErrorSimMenuRunnable implements Runnable{
 						System.out.println("Set to alter block number");
 					} else if (input[1].equalsIgnoreCase("data") && input.length == 3) { //examples of invalid data include packet size too large, illegal characters
 						errorSim.setInvalidData(true);
+						setPacketType(input[1]);
 						errorSim.setErrorPacketBlockNumber(Integer.parseInt(input[2]));
 						System.out.println("Set to alter data");
 					} else {
