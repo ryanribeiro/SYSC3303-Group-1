@@ -40,6 +40,9 @@ public class ServerSpawnThread implements Runnable {
 
 	//port number of client to send response to
 	private int clientPort;
+	//address number of client to send response to
+	private InetAddress clientAddress;
+
 	//last packet sent
 	private DatagramPacket lastPacketSent;
 
@@ -60,13 +63,10 @@ public class ServerSpawnThread implements Runnable {
 	private static final byte FILE_NOT_FOUND = 1;
 	private static final byte ACCESS_VIOLATION_CODE = 2;
 	private static final byte DISK_FULL_CODE = 3;
-	private static final byte ILLEGAL_TFTP_CODE = 4;
-	private static final byte UNKNOWN_TRANSFER_ID = 5;
+	private static final byte ILLEGAL_TFTP_OPERATION = 4;
 	private static final byte FILE_ALREADY_EXISTS = 6;
-	
+
 	private InetAddress serverInetAddress = null;
-	private InetAddress Orig_address;
-	private int Orig_port;
 	/**
 	 * Constructor
 	 * 
@@ -77,6 +77,7 @@ public class ServerSpawnThread implements Runnable {
 		receivePacket = new DatagramPacket(packet.getData(), packet.getLength(),
 				packet.getAddress(), packet.getPort());
 		clientPort = receivePacket.getPort();
+		clientAddress = receivePacket.getAddress();
 		readRequest = false;
 		writeRequest = false;
 		this.server = server;
@@ -109,27 +110,20 @@ public class ServerSpawnThread implements Runnable {
 			/*check if message is proper format*/
 			try {
 				parseMessage();
-				if (readRequest) {
+				if (readRequest) 
 					sendData(readFile(DEFAULT_PATH + fileName));
-
-				} else if (writeRequest) {
+				else if (writeRequest) 
 					writeFile(DEFAULT_PATH + fileName, receiveFile());
-
-				} else {
+				else {
 					System.err.println("Error: Request is neither a write or a read.");
 					System.exit(1);
 				}
 			} catch (InvalidMessageFormatException e) {
 				System.out.println("InvalidMessageFormatException: a message received was of an invalid format");
-				//e.printStackTrace();
+				e.printStackTrace();
 				System.out.println("Invalid message Contents:");
 				printPacketInfo(receivePacket);
-				System.out.println("Sending Error code 4");
-				try {
-					createAndSendErrorPacket(ILLEGAL_TFTP_CODE, "Illegal packet format");
-				} catch (IOException er) {
-					System.err.println("Failed to send error packet");
-				}
+
 			}
 			server.messageProcessed();
 		}
@@ -150,9 +144,7 @@ public class ServerSpawnThread implements Runnable {
 
 		try {
 			byte[] fileData = Files.readAllBytes(path);
-			System.out.println("File contents to send:\n" + new String(Files.readAllBytes(path)));
 			return fileData;
-
 		} catch (IOException e) {
 			//sends error packet to client
 			System.err.println("Failed to read file at specified path");
@@ -181,9 +173,9 @@ public class ServerSpawnThread implements Runnable {
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton
 	 */
 	private void sendData(byte[] fileContents) {
-
 		//split file text into chunks for transfer
 		byte[][] fileData = splitByteArray(fileContents);
+
 		//create socket to transfer file
 		DatagramSocket sendReceiveSocket = null;
 		try {
@@ -198,32 +190,53 @@ public class ServerSpawnThread implements Runnable {
 
 		/*transfer file to client*/
 		DatagramPacket response;
-		int blockNumberInt = 0;
 		int blockNumber = 0;
 		byte[] serverResponseData, ACKData;
 		DatagramPacket ACKDatagram;
 		boolean keepReceiving;
 		do {
-			//update block number
-			blockNumber++;
-			byte[] blockNumberArray = intToByteArray(blockNumber);
-
 			/*create response data*/
 			ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-			outputStream.write(0);
-			outputStream.write(OP_DATA);
-			outputStream.write(blockNumberArray[2]);
-			outputStream.write(blockNumberArray[3]);
-			for (int i = 0; i < fileData[blockNumberInt].length; i++){
-				outputStream.write(fileData[blockNumberInt][i]);
+
+			//check TID
+			if(receivePacket.getPort() != clientPort || receivePacket.getAddress() != clientAddress){
+				System.err.println("unrecognized TID: " + receivePacket.getPort());
+				//unexpected TID
+				outputStream.write(0);
+				outputStream.write(OP_ERROR);
+				outputStream.write(0);
+				outputStream.write(ILLEGAL_TFTP_OPERATION);
+				try {
+					outputStream.write("unrecognized TID".getBytes());
+				} catch (IOException e) {
+					System.err.println("IO exception while sending unexpected TID ERROR");
+					e.printStackTrace();
+					System.exit(1);
+				}
+				outputStream.write(0);
+
+				serverResponseData = outputStream.toByteArray();
+				response = new DatagramPacket(serverResponseData, serverResponseData.length, 
+						receivePacket.getAddress(), receivePacket.getPort());
+			}else{
+				//update block number
+				blockNumber++;
+				byte[] blockNumberArray = intToByteArray(blockNumber);
+
+				//normal operation
+				outputStream.write(0);
+				outputStream.write(OP_DATA);
+				outputStream.write(blockNumberArray[2]);
+				outputStream.write(blockNumberArray[3]);
+				for (int i = 0; i < fileData[blockNumber-1].length; i++){
+					outputStream.write(fileData[blockNumber-1][i]);
+				}
+
+				serverResponseData = outputStream.toByteArray();
+				//create data datagram
+				response = new DatagramPacket(serverResponseData, serverResponseData.length, 
+						clientAddress, clientPort);
 			}
-			blockNumberInt++;
-			serverResponseData = outputStream.toByteArray();
-
-			//create data datagram
-			response = new DatagramPacket(serverResponseData, serverResponseData.length, 
-					receivePacket.getAddress(), clientPort);
-
 			//print information in message to send
 			System.out.println("Server: sending packet");
 			printPacketInfo(response);
@@ -237,7 +250,8 @@ public class ServerSpawnThread implements Runnable {
 				e.printStackTrace();
 				System.exit(1);
 			}
-			lastPacketSent = response;
+			if(receivePacket.getPort() == clientPort && receivePacket.getAddress() == clientAddress)
+				lastPacketSent = response;
 
 			int numTimeouts = 0;
 			do { //keep receiving if the packet was not the one expected. NOTE: Packet last received is thrown out if unexpected.
@@ -246,8 +260,10 @@ public class ServerSpawnThread implements Runnable {
 					//get ACK packet
 					try {
 						System.out.println("Server: waiting for acknowledge");
+
 						sendReceiveSocket.receive(receivePacket);
 						keepReceiving = false;
+
 					} catch (SocketTimeoutException te) {
 						//resend last packet
 						numTimeouts += 1;
@@ -270,6 +286,7 @@ public class ServerSpawnThread implements Runnable {
 					System.err.println("Timed out indefinitely. Total time waited: " + (TIMEOUT_MILLISECONDS * 3)/1000 + " seconds");
 					break;
 				}
+				
 				//extract ACK data
 				ACKDatagram = receivePacket;
 				ACKData = ACKDatagram.getData();
@@ -278,6 +295,29 @@ public class ServerSpawnThread implements Runnable {
 				//print information in message received
 				System.out.println("Server: received packet");
 				printPacketInfo(ACKDatagram);
+
+				//check for illegal operation
+				byte opcode = ACKDatagram.getData()[1];
+				if(!(opcode == OP_RRQ || opcode == OP_WRQ || opcode == OP_ACK 
+						|| opcode == OP_DATA || opcode == OP_ERROR)){
+					try {
+						System.err.println("Error: Illegal TFTP Operation (op code not recognized)");
+						createAndSendErrorPacket(ILLEGAL_TFTP_OPERATION, "Op code not recognized");
+						sendReceiveSocket.close();
+						return;
+					} catch (IOException e) {
+						System.err.println("IO error while sending ERROR packet");
+						e.printStackTrace();
+						System.exit(1);
+					}
+				}
+				
+				if(opcode == OP_ERROR){
+					System.err.println("Error during file read:");
+					printPacketInfo(receivePacket);
+					System.err.println("File read from server failed");
+					return;
+				}
 
 				//ensure we got an ACK response
 				if (ACKDatagram.getData()[1] != OP_ACK || receivedBlockNumber != blockNumber) {
@@ -291,14 +331,11 @@ public class ServerSpawnThread implements Runnable {
 					}
 					keepReceiving = true;
 				}
-
 			} while(keepReceiving);
 
 			//Exit when the final ACK is received. If we reach here, the received ACK has been dealt with.
 			// Just check that last packet has been sent.
-			if (numTimeouts >= 3)
-				break;
-		} while(response.getLength() == MAX_PACKET_SIZE);
+		} while(lastPacketSent.getLength() == MAX_PACKET_SIZE);
 		sendReceiveSocket.close();
 	}
 
@@ -362,10 +399,9 @@ public class ServerSpawnThread implements Runnable {
 	 * @author Joe Frederick Samuel, Luke Newton, CRushton
 	 */
 	private void writeFile(String fileName, byte[] fileContents) {
-		
-		System.out.println("\nFile to write:");
-		System.out.println(new String(fileContents) + "\n");
-		
+		if(fileContents == null)
+			return;
+
 		//Check for file already exists
 		File file = new File(fileName);
 		if (file.exists() && file.isFile()) {
@@ -381,7 +417,7 @@ public class ServerSpawnThread implements Runnable {
 				FileOutputStream fileWriter = new FileOutputStream(fileName); //fileName also includes path. Default path is project folder (may differ from machine to machine)
 				fileWriter.write(fileContents);
 				fileWriter.close();
-			
+
 			} catch (IOException e) {
 				System.err.println("Failed to write the file.");
 				if (e.getMessage().equals("There is not enough space on the disk")) { //create and send error code 3 packet
@@ -408,7 +444,7 @@ public class ServerSpawnThread implements Runnable {
 		if (noErrors)
 			acknowledge(intToByteArray(lastBlockNum), sendSocket);
 	}
-	
+
 	/**
 	 * retrieve a file from the server in multple chunks and put blocks together
 	 * 
@@ -419,7 +455,8 @@ public class ServerSpawnThread implements Runnable {
 	 */
 	private byte[] receiveFile(){
 		//store the packets received from the server
-		DatagramPacket response = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
+		DatagramPacket response = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE,
+				clientAddress, clientPort);
 		//the size of the message received from the server
 		int messageSize;
 		//current block number of DATA
@@ -428,7 +465,7 @@ public class ServerSpawnThread implements Runnable {
 		byte[] serverResponseData;
 		//buffer to store what has been received so far
 		List<Byte> responseBuffer = new ArrayList<>();
-		
+
 		DatagramSocket sendReceiveSocket = null;
 		try {
 			sendReceiveSocket = new DatagramSocket();
@@ -442,8 +479,40 @@ public class ServerSpawnThread implements Runnable {
 		boolean keepReceiving;
 		int numTimeouts = 0;
 		do {
+			//check TID
+			if(response.getPort() != clientPort || response.getAddress() != clientAddress){
+				System.err.println("unrecognized TID: " + response.getPort());
+				//unexpected TID
+				ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+				outputStream.write(0);
+				outputStream.write(OP_ERROR);
+				outputStream.write(0);
+				outputStream.write(ILLEGAL_TFTP_OPERATION);
+				try {
+					outputStream.write("unrecognized TID".getBytes());
+				} catch (IOException e) {
+					System.err.println("IO exception while sending unexpected TID ERROR");
+					e.printStackTrace();
+					System.exit(1);
+				}
+				outputStream.write(0);
+
+				DatagramPacket responseToUnexpectedTID = new DatagramPacket(outputStream.toByteArray(), 
+						outputStream.toByteArray().length, response.getAddress(), response.getPort());
+
+				try {
+					sendReceiveSocket.send(responseToUnexpectedTID);
+					System.out.println("Sent message to:");
+					printPacketInfo(responseToUnexpectedTID);
+				} catch (IOException e) {
+					System.err.println("Server error while sending unknown TID ERROR");
+					e.printStackTrace();
+					System.exit(1);
+				}
+			}  
+			//normal operation
 			//Send acknowledgement to client. It should be determined after writing the file successfully whether an ACK should be sent or an error
-			if (noErrors && !(response.getLength() < MAX_PACKET_SIZE))
+			else if (noErrors && !(response.getLength() < MAX_PACKET_SIZE))
 				acknowledge(intToByteArray(blockNumber), sendReceiveSocket);
 
 			if (response.getLength() < MAX_PACKET_SIZE) {
@@ -481,6 +550,30 @@ public class ServerSpawnThread implements Runnable {
 				//get response datagram data
 				serverResponseData = response.getData();
 
+				//check for illegal operation
+				byte opcode = response.getData()[1];
+				if(!(opcode == OP_RRQ || opcode == OP_WRQ || opcode == OP_ACK 
+						|| opcode == OP_DATA || opcode == OP_ERROR)){
+					try {
+						System.err.println("Error: Illegal TFTP Operation (op code not recognized)");
+						createAndSendErrorPacket(ILLEGAL_TFTP_OPERATION, "Op code not recognized");
+						sendReceiveSocket.close();
+						return null;
+					} catch (IOException e) {
+						System.err.println("IO error while sending ERROR packet");
+						e.printStackTrace();
+						System.exit(1);
+					}
+				}
+				
+				//check for error packet
+				if(serverResponseData[1] == OP_ERROR){
+					System.err.println("Error during file write to server:");
+					printPacketInfo(response);
+					sendReceiveSocket.close();
+					return null;
+				}
+				
 				//if we did not get a DATA packet, exit
 				if (serverResponseData[1] != OP_DATA) {
 					System.err.println("Error during file read: unexpected packet format.");
@@ -548,7 +641,7 @@ public class ServerSpawnThread implements Runnable {
 	 */
 	private void parseMessage() throws InvalidMessageFormatException {
 		byte[] messageData = Arrays.copyOf(receivePacket.getData(), receivePacket.getLength());
-		
+
 		//check first byte
 		if (messageData[0] != 0)
 			throw new InvalidMessageFormatException();
@@ -561,23 +654,16 @@ public class ServerSpawnThread implements Runnable {
 			readRequest = false;
 			writeRequest = true;
 		} else {
+			try {
+				createAndSendErrorPacket(ILLEGAL_TFTP_OPERATION, "Invalid OPCODE");
+			} catch (IOException e) {
+				System.err.println("IO error occured while sending ERROR packet");
+				e.printStackTrace();
+				System.exit(1);
+			}
 			throw new InvalidMessageFormatException();
 		}
-		if (messageData[1] == OP_WRQ || messageData[1] == OP_RRQ) {
-			Orig_address = receivePacket.getAddress();
-			Orig_port = receivePacket.getPort();
-		}
-		//check if expected TID by checking that the server address and packet address are not the same, as well as the
-		//server port and the packet port
-		if (!(Orig_address.equals(receivePacket.getAddress()) && (Orig_port == receivePacket.getPort()))) {
-			System.err.println("Unknown transfer ID of received packet.");
-			try {
-				createAndSendErrorPacket(UNKNOWN_TRANSFER_ID, "Unknown transfer ID of received packet.");
-			} catch (IOException er) {
-				System.err.println("Failed creating/sending error packet");
-				er.printStackTrace();
-			}
-		}
+
 		int currentIndex = 2; //start at 2 to account for the first two bytes
 		//store names of file and mode in a stream
 		ByteArrayOutputStream textStream = new ByteArrayOutputStream();
@@ -590,11 +676,23 @@ public class ServerSpawnThread implements Runnable {
 			for (; messageData[currentIndex] != 0; currentIndex++) {
 				textStream.write(messageData[currentIndex]);
 			}
-			if (textStream.size() <= 0)
-				throw new InvalidMessageFormatException("File Name Empty");
+
 
 			//Convert file name to byte array
 			fileName = textStream.toString();
+
+			//if our filename does not have a '.' in it or is empty, it does not indicate file type, and so is invalid
+			if (textStream.size() <= 0 || !fileName.contains(".")){
+				try {
+					createAndSendErrorPacket(ILLEGAL_TFTP_OPERATION, "Invalid Filename");
+				} catch (IOException e) {
+					System.err.println("IO error occured while sending ERROR packet");
+					e.printStackTrace();
+					System.exit(1);
+				}
+				throw new InvalidMessageFormatException("Invalid Filename");
+			}
+
 
 			/*
 			 * Check for some more text followed by a zero
@@ -606,15 +704,21 @@ public class ServerSpawnThread implements Runnable {
 				textStream.write(messageData[currentIndex]);
 			}
 
-			if (textStream.size() <= 0)
-				throw new InvalidMessageFormatException("Mode Empty");
-
 			mode = textStream.toString();
 			mode = mode.toLowerCase();
 
-			//if the mode text is not netascii or octet, packet is invalid
-			if (!mode.equals("netascii") && !mode.equals("octet"))
+			//if the mode text is not netascii or octet, or is empty, packet is invalid
+			if (textStream.size() <= 0 || 
+					(!mode.equals("netascii") && !mode.equals("octet"))){
+				try {
+					createAndSendErrorPacket(ILLEGAL_TFTP_OPERATION, "Invalid Mode");
+				} catch (IOException e) {
+					System.err.println("IO error occured while sending ERROR packet");
+					e.printStackTrace();
+					System.exit(1);
+				}
 				throw new InvalidMessageFormatException("Invalid Mode");
+			}
 
 		} catch (IndexOutOfBoundsException e) {
 			/*if we go out of bounds while iterating through the message data,
@@ -645,7 +749,7 @@ public class ServerSpawnThread implements Runnable {
 		lastPacketSent = message;
 		sendSocket.close();
 	}
-	
+
 	/**
 	 * Creates and sends an error packet on the port that is being serviced.
 	 * @author Cameron Rushton
@@ -660,31 +764,31 @@ public class ServerSpawnThread implements Runnable {
 		 */
 		if (errorCode < 0 || errorCode > 7) {
 			System.err.println("Unexpected error code given. Error packet not sent.");
-			
+
 		} else if (msg == null) {
 			System.err.println("Error message is null. Error packet not sent.");
-			
+
 		} else {
-		 /*
-		 * Construct error message & send
-		 */
+			/*
+			 * Construct error message & send
+			 */
 			ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-			
+
 			byteStream.write(0);
 			byteStream.write(OP_ERROR);
 			byteStream.write(0);
 			byteStream.write(errorCode);
 			byteStream.write(msg.getBytes()); //<- IOException source
 			byteStream.write(0);
-			
+
 			byte[] responseData = byteStream.toByteArray();
 
 			DatagramPacket errorPacket = new DatagramPacket(responseData, responseData.length,
-					InetAddress.getLocalHost(), clientPort); //<- IOException source
-			
+					clientAddress, clientPort); //<- IOException source
+
 			sendMessage(errorPacket);
 		}
-		
+
 	}
 
 	/**
@@ -701,11 +805,11 @@ public class ServerSpawnThread implements Runnable {
 		System.out.println("Message length: " + packet.getLength());
 		System.out.print("Type: ");
 		switch(dataAsByteArray[1]) {
-			case 1: System.out.println("RRQ"); break;
-			case 2: System.out.println("WRQ"); break;
-			case 3: System.out.println("DATA"); break;
-			case 4: System.out.println("ACK"); break;
-			case 5: System.out.println("ERROR"); break;
+		case 1: System.out.println("RRQ"); break;
+		case 2: System.out.println("WRQ"); break;
+		case 3: System.out.println("DATA"); break;
+		case 4: System.out.println("ACK"); break;
+		case 5: System.out.println("ERROR"); break;
 		}
 		System.out.println("Containing: " + new String(dataAsByteArray));
 		System.out.println("Contents as raw data: " + Arrays.toString(dataAsByteArray) + "\n");

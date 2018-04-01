@@ -36,113 +36,127 @@ public class ErrorSimMenuRunnable implements Runnable{
 		printHelpMenu();
 
 		do {
-			System.out.print("Command:");
+			System.out.print("command:");
 			input = s.nextLine().split(" ");
 
 			try {
 				//check for valid command keyword
-				if (input[0].equalsIgnoreCase("normal")) {
+				if(input[0].equalsIgnoreCase("normal")){
 					errorSim.setPacketDuplicate(false, 0);
 					errorSim.setPacketLose(false);
 					errorSim.setPacketDelay(false, 0);
+					errorSim.setInvalidTID(false);
+					errorSim.setInvalidOpcode(false);
+					errorSim.setInvalidMode(false);
+					errorSim.setInvalidFilename(false);
 					System.out.println("System set to normal operations");
-				} else if (input[0].equalsIgnoreCase("duplicate") || input[0].equalsIgnoreCase("lose")
-						|| input[0].equalsIgnoreCase("delay")) {
-
-					errorOpCode = checkPacketType(input, 1);
+				}else if(input[0].equalsIgnoreCase("duplicate") || input[0].equalsIgnoreCase("lose")
+						|| input[0].equalsIgnoreCase("delay")){
+					//check if the specified packet type is valid (RRQ, WRQ, DATA, or ACK)
+					if(input[1].equalsIgnoreCase("WRQ"))
+						errorOpCode = OP_WRQ;
+					else if(input[1].equalsIgnoreCase("RRQ"))
+						errorOpCode = OP_RRQ;
+					else if(input[1].equalsIgnoreCase("DATA"))
+						errorOpCode = OP_DATA;
+					else if(input[1].equalsIgnoreCase("ACK"))
+						errorOpCode = OP_ACK;
+					else
+						throw new InvalidCommandException();
 
 					//send error simulator the type of packet for the error
 					errorSim.setErrorPacketType(errorOpCode);
 
 					//check if the specified block number (DATA only) is valid
-					if (errorOpCode == OP_DATA || errorOpCode == OP_ACK) {
-						if (Integer.parseInt(input[2]) > 0) {
+					if(errorOpCode == OP_DATA || errorOpCode == OP_ACK){
+						if(Integer.parseInt(input[2]) > 0){
 							errorBlockNumber = Integer.parseInt(input[2]);
 						} else
 							throw new InvalidCommandException();
-					} else if (errorOpCode == OP_RRQ)
+					} else if(errorOpCode == OP_RRQ)
 						errorBlockNumber = 1;
 					//send error simulator the block number for the error
 					errorSim.setErrorPacketBlockNumber(errorBlockNumber);
 
 					//activate artificial error creation in error simulator
-					if (input[0].equalsIgnoreCase("duplicate")) {
-						if (errorOpCode == OP_WRQ || errorOpCode == OP_RRQ)
+					if(input[0].equalsIgnoreCase("duplicate")){
+
+						if(errorOpCode == OP_WRQ || errorOpCode == OP_RRQ)
 							errorSim.setPacketDuplicate(true, Integer.parseInt(input[2]));
 						else
 							errorSim.setPacketDuplicate(true, Integer.parseInt(input[3]));
 						System.out.println("System set to insert artificial duplicate packet error");
-					} else if (input[0].equalsIgnoreCase("lose")) {
+					} else if(input[0].equalsIgnoreCase("lose")){
 						errorSim.setPacketLose(true);
-						System.out.println("System set to insert artificial lost packet error");
-					} else if (input[0].equalsIgnoreCase("delay")) {
-						if (errorOpCode == OP_WRQ || errorOpCode == OP_RRQ)
+						System.out.println("System set to insert artificial lost packet error");	
+					} else if(input[0].equalsIgnoreCase("delay")){
+						if(errorOpCode == OP_WRQ || errorOpCode == OP_RRQ)
 							errorSim.setPacketDelay(true, Integer.parseInt(input[2]));
 						else
 							errorSim.setPacketDelay(true, Integer.parseInt(input[3]));
 
-						System.out.println("System set to insert artificial packet delay");
+						System.out.println("System set to insert artificial packet delay");	
 					}
-				} else if (input[0].equalsIgnoreCase("TID")) {
-					//TID
-					errorOpCode = checkPacketType(input, 1);
+				} else if(input[0].equalsIgnoreCase("invalid")){
+					//create artificial invalid information error
+					if(input[1].equalsIgnoreCase("filename") || input[1].equalsIgnoreCase("mode")){
+						//invalid filename or mode can only be for RRQ or WRQ
+						if(input[2].equalsIgnoreCase("WRQ"))
+							errorOpCode = OP_WRQ;
+						else if(input[2].equalsIgnoreCase("RRQ"))
+							errorOpCode = OP_RRQ;
+						else
+							throw new InvalidCommandException();
 
-					//send error simulator the type of packet for the error
-					errorSim.setErrorPacketType(errorOpCode);
+						//set error Sim to create specified command
+						if(input[1].equalsIgnoreCase("filename")){
+							errorSim.setInvalidFilename(true);
+							System.out.println("System set to invalidate filename");
+						}else{
+							errorSim.setInvalidMode(true);
+							System.out.println("System set to invalidate mode");
+						}
+					} else if(input[1].equalsIgnoreCase("opcode")){
+						if(input[2].equalsIgnoreCase("WRQ"))
+							errorOpCode = OP_WRQ;
+						else if(input[2].equalsIgnoreCase("RRQ"))
+							errorOpCode = OP_RRQ;
+						else if(input[2].equalsIgnoreCase("DATA"))
+							errorOpCode = OP_DATA;
+						else if(input[2].equalsIgnoreCase("ACK"))
+							errorOpCode = OP_ACK;
+						else
+							throw new InvalidCommandException();
 
-					//check if the specified block number (DATA only) is valid
-					if (errorOpCode == OP_DATA || errorOpCode == OP_ACK) {
-						if (Integer.parseInt(input[2]) > 0) {
-							errorBlockNumber = Integer.parseInt(input[2]);
+						//set error Sim to create specified command
+						errorSim.setInvalidOpcode(true);
+						System.out.println("System set to invalidate opcode");
+					}else if(input[1].equalsIgnoreCase("TID")){
+						if(input[2].equalsIgnoreCase("DATA"))
+							errorOpCode = OP_DATA;
+						else if(input[2].equalsIgnoreCase("ACK"))
+							errorOpCode = OP_ACK;
+						else
+							throw new InvalidCommandException();
+						
+						errorSim.setInvalidTID(true);
+						System.out.println("System set to invalidate TID");
+					} else 
+						throw new InvalidCommandException();
+
+					//check if the specified block number (for DATA or ACK only) is valid
+					if(errorOpCode == OP_DATA || errorOpCode == OP_ACK){
+						if(Integer.parseInt(input[3]) > 0){
+							errorBlockNumber = Integer.parseInt(input[3]);
 						} else
 							throw new InvalidCommandException();
-					} else if (errorOpCode == OP_RRQ)
+					} else if(errorOpCode == OP_RRQ)
 						errorBlockNumber = 1;
 					//send error simulator the block number for the error
+					errorSim.setErrorPacketType(errorOpCode);
 					errorSim.setErrorPacketBlockNumber(errorBlockNumber);
 
-					//TID change
-					System.err.println("Test not implemented yet.");
-
-					System.out.println("System set to modify Transfer ID values for data packets.");
-				}
-
-
-				else if(input[0].equalsIgnoreCase("invalid")) { //Invalid packet formats
-					// Format for RRQ/WRQ: invalid opcode <packet type> or invalid mode <packet type>
-					// Format for DATA/ACK: invalid <opcode/block> <packet type> <block number> or invalid data <block number>
-
-					if (input[1].equalsIgnoreCase("opcode")) {
-						errorSim.setInvalidOpcode(true);
-						setPacketType(input[2]);
-
-						if (input.length == 4) {
-							errorSim.setErrorPacketBlockNumber(Integer.parseInt(input[3]));
-						} else {
-							errorSim.setErrorPacketBlockNumber(1); //default set to 1
-						}
-						System.out.println("Set to alter opcode");
-					} else if (input[1].equalsIgnoreCase("mode") && input.length == 3) {
-						errorSim.setInvalidMode(true);
-						setPacketType(input[2]);
-						System.out.println("Set to alter mode");
-					} else if (input[1].equalsIgnoreCase("block") && input.length == 4) { //also need to know which block number to invalidate
-						errorSim.setInvalidBlock(true);
-						setPacketType(input[2]);
-						errorSim.setErrorPacketBlockNumber(Integer.parseInt(input[3]));
-						System.out.println("Set to alter block number");
-					} else if (input[1].equalsIgnoreCase("data") && input.length == 3) { //examples of invalid data include packet size too large, illegal characters
-						errorSim.setInvalidData(true);
-						setPacketType(input[1]);
-						errorSim.setErrorPacketBlockNumber(Integer.parseInt(input[2]));
-						System.out.println("Set to alter data");
-					} else {
-						throw new InvalidCommandException();
-					}
-
-				}
-
-				else if(input[0].equalsIgnoreCase("help")){
+				} else if(input[0].equalsIgnoreCase("help")){
 					if(input.length == 1)
 						printHelpMenu();
 					else if(input[1].equalsIgnoreCase("normal")){
@@ -178,12 +192,14 @@ public class ErrorSimMenuRunnable implements Runnable{
 								+ "Once terminated, files will not be able to be transferred between any running clients and the server until a new error simulator is run.\n"
 								+ "A message will be displayed indicating the the error simulator program has been terminated.\n");
 					}else if(input[1].equalsIgnoreCase("invalid")) {
-						System.out.println("\nFormat for RRQ/WRQ: invalid opcode <packet type> or invalid mode <packet type>\n"
-								+ "Format for DATA/ACK: invalid <opcode/block> <packet type> <block number> or invalid data <block number> \n"
-								+ "'invalid opcode WRQ' will invalidate the opcode on the WRQ sent through the error simulator\n"
-								+ "'invalid mode RRQ' will invalidate the mode of the RRQ packet\n"
-								+ "'invalid block ACK 3' will invalidate the block number of ACK packet 3 transferred through the error simulator\n"
-								+ "'invalid data 3' will invalidate the data in data block number 3 sent through the error simulator.'");
+						System.out.println("\nFormat for RRQ/WRQ: invalid <type of invalidation> <packet type> <block number>\n"
+								+ "The command 'invalid' will cause the error simulator to invalidate the specified information on a specified packet, resulting in an ERROR code 4 or 5\n"
+								+ "Valid types of invalidation are: mode, filename, opcode TID\n"
+								+ "'mode' and 'filename' can only be invalidated on WRQ and RRQ packets as they are the only packets containing this information\n"
+								+ "'TID' can only be invalidated on DATA and ACK packets as TID cannot be altered on the first packet sent"
+								+ "If invalidating the opcode or TID on an ACK or DATA packet, the block number must be specified\n"
+								+ "ex. 'invalid mode WRQ' will invalidate the mode on a qrite request, causing the server to send an ERROR 4 packet\n"
+								+ "ex2. 'invalid TID DATA 4' will alter the TID of DATA packet 4, resulting in a ERROR 5 packet sent to that new TID\n");
 					}
 				}else if(input[0].equalsIgnoreCase("quit")){
 					break;
@@ -194,7 +210,7 @@ public class ErrorSimMenuRunnable implements Runnable{
 				/*any type of exception that we can get here (IndexOutOfBoundsException,
 				 * InvalidNumberFormatException, InvalidMessageFormatException) all 
 				 * indicate incorrect command entered */
-				System.out.println("invalid command");
+				System.out.println("command not recognized, type help for available command list");
 			}
 		}while(true);
 		s.close();
@@ -202,45 +218,6 @@ public class ErrorSimMenuRunnable implements Runnable{
 		System.exit(0);
 	}
 
-	/**
-	 * Check if the specified packet type is valid (RRQ, WRQ, DATA, or ACK)
-	 * @author Luke Newton, CRushton
-	 * @param input a slit array of strings representing user input
-	 * @param index the index of packet type data in the input array
-	 * @return opcode of packet type as an integer
-	 * @throws InvalidCommandException Invalid command thrown - user must have given a packet type that doesn't exist
-	 */
-	private int checkPacketType(String[] input, int index) throws InvalidCommandException {
-
-		if (index >= input.length || index < 0) { //invalid index
-			return -1;
-		}
-
-		if (input[index].equalsIgnoreCase("WRQ"))
-			return OP_WRQ;
-		else if (input[index].equalsIgnoreCase("RRQ"))
-			return OP_RRQ;
-		else if (input[index].equalsIgnoreCase("DATA"))
-			return OP_DATA;
-		else if (input[index].equalsIgnoreCase("ACK"))
-			return OP_ACK;
-		else
-			throw new InvalidCommandException();
-	}
-
-	/**
-	 * @author CRushton
-	 * Sets error packet type in error simulator
-	 * @param input the string indicating the packet type input by the user
-	 */
-	private void setPacketType(String input) {
-		switch(input.toUpperCase()){
-			case "RRQ": errorSim.setErrorPacketType(OP_RRQ); break;
-			case "WRQ": errorSim.setErrorPacketType(OP_WRQ); break;
-			case "DATA": errorSim.setErrorPacketType(OP_DATA); break;
-			case "ACK": errorSim.setErrorPacketType(OP_ACK); break;
-		}
-	}
 	/**display message to console showing available commands
 	 *  @author Luke Newton
 	 */
@@ -248,11 +225,10 @@ public class ErrorSimMenuRunnable implements Runnable{
 		System.out.println("\ntype 'normal' to have no artificial errors created (default)");
 		System.out.println("type 'duplicate' followed by the type of packet to duplicate, packet number (if applicable) and time in milliseconds between sending duplicate to insert a duplicate packet error");
 		System.out.println("type 'lose' followed by the type of packet to lose and packet number (if applicable) to insert a packet loss error");
-		System.out.println("type 'delay' followed by the type of packet to delay, pack number (if applicable), and milliseconds to delay for to insert a packet transfer delay");
-		System.out.println("type 'invalid' followed by the invalidated packet region (opcode, mode, block, data) and packet type or block number");
-		System.out.println("type 'tid' to simulate error in TID for data packets.");
+		System.out.println("type 'delay' followed by the type of packet to delay, packet number (if applicable), and milliseconds to delay for to insert a packet transfer delay");
+		System.out.println("type 'invalid' followed by the type of information to invalidate, type of packet to invalidate info on, and packet number (if applicable) to simulate invalid packets sent");
 		System.out.println("type 'quit' to close the error simulator (will not allow for any further file transfers to take place)");
-		System.out.println("type 'help' to display this message again, or 'help' followed by any of the above command words for further description.\n");
+		System.out.println("type 'help' to display this message again\n");
 	}
 
 }

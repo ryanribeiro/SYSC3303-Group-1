@@ -41,7 +41,9 @@ public class Client {
 
 	//TFTP Address
 	private static final String TFTP_SERVER_IP = "127.0.0.1";
+	private static final byte ILLEGAL_TFTP_OPERATION = 4;
 	private InetAddress serverInetAddress = null;
+	private int serverPort;
 
 	//socket used by client to send and receive datagrams
 	private DatagramSocket sendReceiveSocket;
@@ -49,6 +51,7 @@ public class Client {
 	private DatagramPacket receivePacket;
 	//the last packet sent out
 	private DatagramPacket lastPacketSent;
+
 	//indicates whether to print infor to display or not
 	private boolean quietMode;
 
@@ -65,9 +68,8 @@ public class Client {
 			e.printStackTrace();
 			System.exit(1);
 		}
-
+		serverPort = INTERMEDIATE_HOST_PORT_NUMBER;
 		quietMode = false;
-
 		//attempt to create socket for send and receive
 		sendReceiveSocket = new DatagramSocket();
 		//turn on timeout if required
@@ -106,7 +108,7 @@ public class Client {
 	private void acknowledge(byte[] blockID) {
 		byte[] ack = {0, OP_ACK, blockID[2], blockID[3]};
 
-		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, serverInetAddress, receivePacket.getPort());
+		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, serverInetAddress, serverPort);
 
 		sendMessage(ACKDatagram);
 		if(!quietMode)
@@ -137,7 +139,7 @@ public class Client {
 	}
 
 	/**
-	 * formats a message passed to contain the predefined format for a read request
+	 * formats a message passed to contain the predefined format for a request
 	 *
 	 * @author Luke Newton, Joe Frederick Samuel
 	 * @param filename filename to send with the read request
@@ -206,6 +208,7 @@ public class Client {
 		String[] input;
 		boolean filenameGiven;
 		while(true){
+			client.serverPort = INTERMEDIATE_HOST_PORT_NUMBER;
 			System.out.print("Command: ");
 
 			/*receive user input*/
@@ -225,12 +228,6 @@ public class Client {
 				byte[] file = client.readRequest(filename);
 
 				if(file != null){
-					//print the retreived file
-					if(!client.quietMode){
-						System.out.println("File read from server:");
-						System.out.println(new String(file));
-					}
-
 					//get filename to save retreived file as
 					System.out.print("Enter name to save file as: ");
 					String newFilename = scanner.nextLine();
@@ -278,9 +275,9 @@ public class Client {
 				}else{
 					System.out.println("Invalid command! Type 'help' to check available commands");
 				}
-			}else if(command.equalsIgnoreCase("quit")){
+			}else if(command.equalsIgnoreCase("quit"))
 				break;
-			}else if(input.length > 2)
+			else if(input.length > 2)
 				System.out.println("Invalid command! Too many arguments.");
 			else
 				System.out.println("Invalid command! Type 'help' to check available commands and remember to provide a file name if required");
@@ -318,26 +315,23 @@ public class Client {
 	 * @author Joe Frederick Samuel, Ryan Ribeiro, Luke Newton, CRushton
 	 */
 	private void sendData(String filename){
+
 		//create WRQ data
 		byte[] WRQData = createPacketData(filename, MODE, OP_WRQ);
 		//create WRQ
 		DatagramPacket WRQDatagram = new DatagramPacket(WRQData, WRQData.length,
-				serverInetAddress, INTERMEDIATE_HOST_PORT_NUMBER);
+				serverInetAddress, serverPort);
 
 		//read in the specified file
 		byte[][] fileData = splitByteArray(readFile(filename));
-		if(!quietMode){
-			String fileText = new String(readFile(filename));
-			System.out.println("\nFile to send:\n" + fileText + "\n");
-		}
 
 		/*transfer file to server*/
 		DatagramPacket response = null;
 		int blockNumberInt = 0;
 		int blockNumber = 0;
-		int serverPort = 0;
 		byte[] serverResponseData, ACKData;
 		boolean keepReceiving;
+		boolean firstTraversal = true;
 		int numTimeouts = 0;
 		//get ACK packet
 
@@ -356,6 +350,11 @@ public class Client {
 						if(!quietMode)
 							System.out.println("Client: waiting for acknowledge");
 						sendReceiveSocket.receive(receivePacket);
+						if(firstTraversal){
+							serverInetAddress = receivePacket.getAddress();
+							serverPort = receivePacket.getPort();
+							firstTraversal = false;
+						}
 						keepReceiving = false;
 					} catch (SocketTimeoutException er) { //Timed out, resend previous packet
 						if(!quietMode)
@@ -371,19 +370,43 @@ public class Client {
 
 				if (numTimeouts >= 3) {
 					if(!quietMode)
-						System.err.println("Timed out indefinitely. Time waited: " + (TIMEOUT_MILLISECONDS * numTimeouts)/1000 + " seconds");
+						System.err.println("Timed out indefinitely. Time waited: " + (TIMEOUT_MILLISECONDS * 3)/1000 + " seconds");
 					break;
 				}
 
 				//extract ACK data
 				ACKData = receivePacket.getData();
 				int receivedBlockNumber = extractBlockNumber(ACKData);
-				serverPort = receivePacket.getPort();
 
 				//print information in message received
 				if(!quietMode){
 					System.out.println("Client: received packet");
 					printPacketInfo(receivePacket);
+				}
+
+				if(ACKData[1] == OP_ERROR){
+					if(!quietMode){
+						System.err.println("Error during file write:");
+						printPacketInfo(receivePacket);
+						System.err.println("File write failed");
+					}
+					return;
+				}
+
+				//check for illegal operation
+				byte opcode = ACKData[1];
+				if(!(opcode == OP_RRQ || opcode == OP_WRQ || opcode == OP_ACK 
+						|| opcode == OP_DATA || opcode == OP_ERROR)){
+					try {
+						System.err.println("Error: Illegal TFTP Operation (op code not recognized)");
+						createAndSendErrorPacket(ILLEGAL_TFTP_OPERATION, "Op code not recognized", serverPort);
+						System.err.println("File write failed");
+						return;
+					} catch (IOException e) {
+						System.err.println("IO error while sending ERROR packet");
+						e.printStackTrace();
+						System.exit(1);
+					}
 				}
 
 				if (checkACK(receivePacket) < 0) {
@@ -398,28 +421,91 @@ public class Client {
 				}
 			}while (keepReceiving);
 
-			//update block number
-			blockNumber++;
-			byte[] blockNumberArray = intToByteArray(blockNumber);
-
 			/*create response data*/
 			ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-			outputStream.write(0);
-			outputStream.write(OP_DATA);
-			outputStream.write(blockNumberArray[2]);
-			outputStream.write(blockNumberArray[3]);
-			for(int i = 0; i < fileData[blockNumberInt].length; i++){
-				outputStream.write(fileData[blockNumberInt][i]);
+
+			//ensure packet comes from same TID
+			if(receivePacket.getPort() != serverPort || receivePacket.getAddress() != serverInetAddress){
+				System.err.println("unrecognized TID: " + receivePacket.getPort());
+				//unexpected TID
+				outputStream.write(0);
+				outputStream.write(OP_ERROR);
+				outputStream.write(0);
+				outputStream.write(ILLEGAL_TFTP_OPERATION);
+				try {
+					outputStream.write("unrecognized TID".getBytes());
+				} catch (IOException e) {
+					System.err.println("IO exception while sending unexpected TID ERROR");
+					e.printStackTrace();
+					System.exit(1);
+				}
+				outputStream.write(0);
+
+				serverResponseData = outputStream.toByteArray();
+				response = new DatagramPacket(serverResponseData, serverResponseData.length, 
+						receivePacket.getAddress(), receivePacket.getPort());
+			} else{
+				//update block number
+				blockNumber++;
+				byte[] blockNumberArray = intToByteArray(blockNumber);
+
+
+				outputStream.write(0);
+				outputStream.write(OP_DATA);
+				outputStream.write(blockNumberArray[2]);
+				outputStream.write(blockNumberArray[3]);
+				for(int i = 0; i < fileData[blockNumberInt].length; i++){
+					outputStream.write(fileData[blockNumberInt][i]);
+				}
+				blockNumberInt++;
+				serverResponseData = outputStream.toByteArray();
+
+				//create data datagram
+				response = new DatagramPacket(serverResponseData, serverResponseData.length,
+						serverInetAddress, serverPort);
 			}
-			blockNumberInt++;
-			serverResponseData = outputStream.toByteArray();
-
-			//create data datagram
-			response = new DatagramPacket(serverResponseData, serverResponseData.length,
-					serverInetAddress, serverPort);
-
 		}while(true);
 	}
+
+	/**
+	 * Creates and sends an error packet on the port that is being serviced.
+	 * @author Cameron Rushton
+	 * @param errorCode A number indicating the TFTP error code number
+	 * @param msg The message that is displayed to the user
+	 * @throws IOException
+	 */
+	private void createAndSendErrorPacket(byte errorCode, String msg, int serverPort) throws IOException {
+		/*
+		 * Check for input errors
+		 */
+		if (errorCode < 0 || errorCode > 7) {
+			System.err.println("Unexpected error code given. Error packet not sent.");
+
+		} else if (msg == null) {
+			System.err.println("Error message is null. Error packet not sent.");
+
+		} else {
+			/*
+			 * Construct error message & send
+			 */
+			ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+
+			byteStream.write(0);
+			byteStream.write(OP_ERROR);
+			byteStream.write(0);
+			byteStream.write(errorCode);
+			byteStream.write(msg.getBytes()); //<- IOException source
+			byteStream.write(0);
+
+			byte[] responseData = byteStream.toByteArray();
+
+			DatagramPacket errorPacket = new DatagramPacket(responseData, responseData.length,
+					serverInetAddress, serverPort); //<- IOException source
+
+			sendMessage(errorPacket);
+		}
+
+	}	
 
 	/**
 	 * looks for errors in ACK packet
@@ -528,6 +614,7 @@ public class Client {
 
 		boolean keepReceiving;
 		int numTimeouts = 0;
+		boolean firstTraversal = true;
 
 		do {
 			keepReceiving = true; //new packet to receive, reset to true
@@ -536,6 +623,11 @@ public class Client {
 
 					try {
 						sendReceiveSocket.receive(receivePacket);
+						if(firstTraversal){
+							serverInetAddress = receivePacket.getAddress();
+							serverPort = receivePacket.getPort();
+							firstTraversal = false;
+						}
 						keepReceiving = false;
 					} catch (SocketTimeoutException er) {
 						if(!quietMode)
@@ -555,37 +647,51 @@ public class Client {
 
 				if (numTimeouts >= 3) {
 					if(!quietMode)
-						System.err.println("Timed out indefinitely. Total time waited: " + (TIMEOUT_MILLISECONDS * numTimeouts)/1000 + " seconds");
+						System.err.println("Timed out indefinitely. Total time waited: " + (TIMEOUT_MILLISECONDS * 3)/1000 + " seconds");
 					break;
 				}
 				//print information in message received
-				if(!quietMode)
+				if(!quietMode){
 					System.out.println("Client: received packet");
-				printPacketInfo(receivePacket);
+					printPacketInfo(receivePacket);
+				}
 
 				//get size of the message
 				messageSize = receivePacket.getLength();
 				//get response datagram data
 				serverResponseData = receivePacket.getData();
 
+				//check for illegal operation
+				byte opcode = serverResponseData[1];
+				if(!(opcode == OP_RRQ || opcode == OP_WRQ || opcode == OP_ACK 
+						|| opcode == OP_DATA || opcode == OP_ERROR)){
+					try {
+						System.err.println("Error: Illegal TFTP Operation (op code not recognized)");
+						createAndSendErrorPacket(ILLEGAL_TFTP_OPERATION, "Op code not recognized", receivePacket.getPort());
+						System.err.println("File write failed");
+						return null;
+					} catch (IOException e) {
+						System.err.println("IO error while sending ERROR packet");
+						e.printStackTrace();
+						System.exit(1);
+					}
+				}
+
+				if(serverResponseData[1] == OP_ERROR){
+					if(!quietMode){
+						System.err.println("Error during file read:");
+						printPacketInfo(receivePacket);
+					}
+					return null;
+				}
+
 				//if we did not get a DATA packet, keep receiving
 				if (serverResponseData[1] != OP_DATA) {
 					if(!quietMode)
 						System.err.println("Error during file read: unexpected packet format.");
 					keepReceiving = true;
-					//if the packet was error codes 1,2,3 or 6, stop thread
-					if (serverResponseData[1] == OP_ERROR && (serverResponseData[3] == 1 || serverResponseData[3] == 2
-						|| serverResponseData[3] == 3 || serverResponseData[3] == 6)) {
-						keepReceiving = false;
-						numTimeouts = 3;
-					}
 				}
-
-
 			} while (keepReceiving);
-			if (numTimeouts >= 3)
-				break;
-
 			//get block number
 			blockNumber = extractBlockNumber(serverResponseData);
 
@@ -593,10 +699,43 @@ public class Client {
 			for(int i = 4; i < messageSize; i++)
 				responseBuffer.add(serverResponseData[i]);
 
-			//send acknowledgement to server (parameter passed is a conversion of int to byte[])
-			acknowledge(intToByteArray(blockNumber));
 
-		} while(!isLastPacket(receivePacket));
+			//ensure packet comes from same TID
+			if(receivePacket.getPort() != serverPort || receivePacket.getAddress() != serverInetAddress){
+				System.err.println("unrecognized TID: " + receivePacket.getPort());
+				//unexpected TID
+				ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+				outputStream.write(0);
+				outputStream.write(OP_ERROR);
+				outputStream.write(0);
+				outputStream.write(ILLEGAL_TFTP_OPERATION);
+				try {
+					outputStream.write("unrecognized TID".getBytes());
+				} catch (IOException e) {
+					System.err.println("IO exception while sending unexpected TID ERROR");
+					e.printStackTrace();
+					System.exit(1);
+				}
+				outputStream.write(0);
+
+				DatagramPacket responseToUnexpectedTID = new DatagramPacket(outputStream.toByteArray(), 
+						outputStream.toByteArray().length, receivePacket.getAddress(), receivePacket.getPort());
+
+				try {
+					sendReceiveSocket.send(responseToUnexpectedTID);
+					System.out.println("Sent message to:");
+					printPacketInfo(responseToUnexpectedTID);
+				} catch (IOException e) {
+					System.err.println("Server error while sending unknown TID ERROR");
+					e.printStackTrace();
+					System.exit(1);
+				}
+			}else{
+				//send acknowledgement to server (parameter passed is a conversion of int to byte[])
+				acknowledge(intToByteArray(blockNumber));
+			}
+
+		} while(!isLastPacket(receivePacket) && numTimeouts < 3);
 
 		if (numTimeouts >= 3 && !quietMode)
 			System.err.println("Client timed out");
@@ -636,9 +775,9 @@ public class Client {
 	 * @param packet DatagramPacket
 	 */
 	private void printPacketInfo(DatagramPacket packet) {
-		//if in quiet mode, do not print
 		if(quietMode)
 			return;
+
 		//get meaningful portion of message
 		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());
 

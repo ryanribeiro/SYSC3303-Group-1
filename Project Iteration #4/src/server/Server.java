@@ -86,7 +86,7 @@ public class Server {
 	 * 
 	 * @return true if server is shutting down, otherwise false
 	 */
-	private boolean isQuitTime() {
+	public boolean isQuitTime() {
 		return quitPreperation;
 	}
 
@@ -95,7 +95,7 @@ public class Server {
 	 * 
 	 * @author Luke Newton
 	 */
-	synchronized void setQuitTime() {
+	public synchronized void setQuitTime() {
 			this.quitPreperation = true;
 			receiveSocket.close();	
 	}
@@ -106,7 +106,7 @@ public class Server {
 	 * @author Luke Newton
 	 * @param request the message received to process
 	 */
-	private void newMessageToProcess(DatagramPacket request){
+	public void newMessageToProcess(DatagramPacket request){
 		System.out.println("Server: received message");
 		serverLogicThread = new Thread(new ServerSpawnThread(this, request)); 
 		//priorities are set low to make shutdown occur in a timely manner
@@ -120,7 +120,7 @@ public class Server {
 	 * 
 	 * @author Luke Newton
 	 */
-	void messageProcessed(){
+	public void messageProcessed(){
 		numberOfMessagesBeingProcessed--;
 	}
 
@@ -135,12 +135,30 @@ public class Server {
 	}
 
 	/**
+	 *Return the data in the datagram packet received
+	 *
+	 * @return  the data in the datagram packet received
+	 */
+	public byte[] getreceivePacketData(){
+		return receivePacket.getData();
+	}
+
+	/**
+	 * returns the port number of the latest client to send a message here
+	 * 
+	 * @return the port number of the latest client to send a message here
+	 */
+	public int getClientPort(){
+		return clientPort;
+	}
+
+	/**
 	 * client waits until it receives a message, which is parsed, stored in receivePacket and returned
 	 * 
 	 * @return the message received as a  DatagramPacket
 	 * @throws IOException indicated an I/O error has occurred
 	 */
-	private DatagramPacket waitReceiveMessage() throws IOException{
+	public DatagramPacket waitReceiveMessage() throws IOException{
 		receiveSocket.receive(receivePacket);
 		return receivePacket;
 	}
@@ -148,7 +166,7 @@ public class Server {
 	/**
 	 * pauses execution breiefly so output can be read as it is created
 	 */
-	void pause(){
+	public void pause(){
 		if(PAUSES_ON){
 			try {
 				Thread.sleep(PAUSE_MILLISECONDS);
