@@ -108,7 +108,7 @@ public class Client {
 	private void acknowledge(byte[] blockID) {
 		byte[] ack = {0, OP_ACK, blockID[2], blockID[3]};
 
-		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, serverInetAddress, serverPort);
+		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, receivePacket.getAddress(), receivePacket.getPort());
 
 		sendMessage(ACKDatagram);
 		if(!quietMode)
@@ -179,7 +179,8 @@ public class Client {
 			System.out.print("Sending packet \nTo: ");
 			printPacketInfo(message);
 		}
-		lastPacketSent = message;
+		if(receivePacket.getPort() == serverPort && receivePacket.getAddress() == serverInetAddress)
+			lastPacketSent = message;
 	}
 
 	/**
@@ -695,11 +696,6 @@ public class Client {
 			//get block number
 			blockNumber = extractBlockNumber(serverResponseData);
 
-			//add response data to buffer (index 4 is the start of data in TFTP DATA packets)
-			for(int i = 4; i < messageSize; i++)
-				responseBuffer.add(serverResponseData[i]);
-
-
 			//ensure packet comes from same TID
 			if(receivePacket.getPort() != serverPort || receivePacket.getAddress() != serverInetAddress){
 				System.err.println("unrecognized TID: " + receivePacket.getPort());
@@ -731,6 +727,10 @@ public class Client {
 					System.exit(1);
 				}
 			}else{
+				//add response data to buffer (index 4 is the start of data in TFTP DATA packets)
+				for(int i = 4; i < messageSize; i++)
+					responseBuffer.add(serverResponseData[i]);
+				
 				//send acknowledgement to server (parameter passed is a conversion of int to byte[])
 				acknowledge(intToByteArray(blockNumber));
 			}

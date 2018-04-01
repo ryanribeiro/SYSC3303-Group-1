@@ -286,7 +286,7 @@ public class ServerSpawnThread implements Runnable {
 					System.err.println("Timed out indefinitely. Total time waited: " + (TIMEOUT_MILLISECONDS * 3)/1000 + " seconds");
 					break;
 				}
-				
+
 				//extract ACK data
 				ACKDatagram = receivePacket;
 				ACKData = ACKDatagram.getData();
@@ -311,7 +311,7 @@ public class ServerSpawnThread implements Runnable {
 						System.exit(1);
 					}
 				}
-				
+
 				if(opcode == OP_ERROR){
 					System.err.println("Error during file read:");
 					printPacketInfo(receivePacket);
@@ -565,7 +565,7 @@ public class ServerSpawnThread implements Runnable {
 						System.exit(1);
 					}
 				}
-				
+
 				//check for error packet
 				if(serverResponseData[1] == OP_ERROR){
 					System.err.println("Error during file write to server:");
@@ -573,7 +573,7 @@ public class ServerSpawnThread implements Runnable {
 					sendReceiveSocket.close();
 					return null;
 				}
-				
+
 				//if we did not get a DATA packet, exit
 				if (serverResponseData[1] != OP_DATA) {
 					System.err.println("Error during file read: unexpected packet format.");
@@ -583,9 +583,12 @@ public class ServerSpawnThread implements Runnable {
 			//get block number
 			blockNumber = extractBlockNumber(serverResponseData);
 
-			//add response data to buffer (index 4 is the start of data in TFTP DATA packets)
-			for(int i = 4; i < messageSize; i++)
-				responseBuffer.add(serverResponseData[i]);
+
+			if(response.getPort() == clientPort && response.getAddress() == clientAddress){
+				//add response data to buffer (index 4 is the start of data in TFTP DATA packets)
+				for(int i = 4; i < messageSize; i++)
+					responseBuffer.add(serverResponseData[i]);
+			}
 
 		} while(true);
 
