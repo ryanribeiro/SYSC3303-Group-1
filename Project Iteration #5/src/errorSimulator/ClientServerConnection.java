@@ -52,6 +52,7 @@ public class ClientServerConnection implements Runnable {
 	private boolean createInvalidOpcode;
 	private boolean createInvalidFilename;
 	private boolean createInvalidTID;
+	private InetAddress clientAddress;
 
 	//TFTP OP code
 	private static final byte OP_RRQ = 1;
@@ -114,7 +115,7 @@ public class ClientServerConnection implements Runnable {
 	 * @param packet : DatagramPacket
 	 */
 	private void printPacketInfo(DatagramPacket packet) {
-		
+
 		//get meaningful portion of message
 		byte[] dataAsByteArray = Arrays.copyOf(packet.getData(), packet.getLength());		
 
@@ -184,6 +185,7 @@ public class ClientServerConnection implements Runnable {
 			//get meaningful portion of initial client request
 			messageData = Arrays.copyOf(request.getData(), request.getLength());		
 			clientPort = request.getPort();
+			clientAddress = request.getAddress();
 
 			//print data received from client. Got this packet from parent ErrorSimulator.
 			printMessageRecieved(request);
@@ -272,15 +274,8 @@ public class ClientServerConnection implements Runnable {
 
 			} else {
 				//create packet to send resposne to client
-				try {
-					sendPacket = new DatagramPacket(messageData, messageData.length,
-							InetAddress.getLocalHost(), clientPort);
-				} catch (UnknownHostException e) {
-					//failed to determine the host IP address
-					System.err.println("UnknownHostException: could not determine IP address of host while creating packet.");
-					e.printStackTrace();
-					System.exit(1);
-				}
+				sendPacket = new DatagramPacket(messageData, messageData.length,
+						clientAddress, clientPort);
 
 				//send datagram to client
 				sendMessage(sendPacket);
@@ -326,16 +321,25 @@ public class ClientServerConnection implements Runnable {
 				}
 
 				int portToSendPacket = 0;
+				InetAddress addressToSendPacket = null;
 				String recipient = "";
 				//normal operations to determine who to send packet to
 				if(response.getPort() == clientPort){
 					//send to server
 					portToSendPacket = serverPort;
+					try {
+						addressToSendPacket = InetAddress.getLocalHost();
+					} catch (UnknownHostException e) {
+						System.err.println("Could not determine local address while sending packet to server.");
+						e.printStackTrace();
+						System.exit(1);
+					}
 					recipient = "server";
 				} else {
 					//send to client
 					serverPort = response.getPort();
 					portToSendPacket = clientPort;
+					addressToSendPacket = clientAddress;
 					recipient = "client";
 				}
 
@@ -359,17 +363,10 @@ public class ClientServerConnection implements Runnable {
 					messageData[1] = 0; 
 					createInvalidOpcode = false;
 				}
-				
+
 				//create packet to send to recipient
-				try {
-					sendPacket = new DatagramPacket(messageData, messageData.length,
-							InetAddress.getLocalHost(), portToSendPacket);
-				} catch (UnknownHostException e) {
-					//failed to determine the host IP address
-					System.err.println("UnknownHostException: could not determine IP address of host while creating packet.");
-					e.printStackTrace();
-					System.exit(1);
-				}
+				sendPacket = new DatagramPacket(messageData, messageData.length,
+						addressToSendPacket, portToSendPacket);
 
 				//delay DATA and ACK
 				if(createPacketDelay &&
@@ -392,7 +389,7 @@ public class ClientServerConnection implements Runnable {
 					tamperPacketCooldown = COOLDOWN_PACKETS;
 					continue;
 				}
-				
+
 				//send mesage to recipient
 				sendMessage(sendPacket);
 				System.out.println("Error simulator sent message to " + recipient);
