@@ -20,46 +20,62 @@ import java.util.List;
 import java.util.Scanner;
 
 /**
- * a class representing the client for the server-client-intermediate host system. has
- * Capability to send and receive messages to and from the intermediate host,
- * and format read/write requests
+ * This class represents the client for the server-client-error simulator system. It
+ * has the capability to send read and write requests to a server at a specified IP address,
+ * toggle the print-out of details of every packet sent and recieved, and an extensive help 
+ * menu to understand acceptable commands.
  */
 public class Client {
+	/**START: object constants*/
 	//port number of intermediate host (ErrorSimulator)
 	private static final int INTERMEDIATE_HOST_PORT_NUMBER = 23;
 	//max size for data in a DatagramPacket
 	private static final int MAX_PACKET_SIZE = 516;
-	//mode to send to server
-	private static final String MODE = "octet";
-	//change this to turn on/off timeouts for the client
-	private static final boolean TIMEOUTS_ON = true;
-	//Milliseconds until client times out while waiting for response
-	private static final int TIMEOUT_MILLISECONDS = 5000;
 	//max block size as an int
 	private static final int MAX_BLOCK_SIZE = 512;
-
-	//TFTP OP code
+	//mode to send to server (not used in this example, but a part of TFTP)
+	private static final String MODE = "octet";
+	//boolean indicating if client can timeout while waiting for packet
+	private static final boolean TIMEOUTS_ON = true;
+	//number of milliseconds until client times out while waiting for packet
+	private static final int TIMEOUT_MILLISECONDS = 5000;
+	
+	/**START: TFTP operation codes*/
+	//read request
 	private static final byte OP_RRQ = 1;
+	//write request
 	private static final byte OP_WRQ = 2;
+	//data packet
 	private static final byte OP_DATA = 3;
+	//acknowledge packet
 	private static final byte OP_ACK = 4;
+	//error packet
 	private static final byte OP_ERROR = 5;
+	/**END: TFTP operation codes*/
 
-	//TFTP Address
+	/**START: TFTP error codes*/
+	//TFTP error code 4 - unrecognized operation
 	private static final byte ILLEGAL_TFTP_OPERATION = 4;
+	//TFTP error code 5 - unrecognized operation
+	private static final byte UNRECOGNIZED_TID = 5;
+	/**END: TFTP error codes*/
+	/**END: object constants*/
+	
+	/**START: instance variables*/
+	//the address of the server to send requests to
 	private InetAddress serverAddress = null;
+	//the port number of the server to send requests to
 	private int serverPort;
-
 	//socket used by client to send and receive datagrams
 	private DatagramSocket sendReceiveSocket;
-	//place to store response from intermediate host
+	//the most recent packet received
 	private DatagramPacket receivePacket;
-	//the last packet sent out
+	//the most recent (non-ERROR-code-5) packet sent out
 	private DatagramPacket lastPacketSent;
-
-	//indicates whether to print infor to display or not
+	//boolean indicating if details of packets sent and received should be printed to console
 	private boolean quietMode;
-
+	/**END: instance variables*/
+	
 	/**Constructor
 	 * @throws SocketException indicates failed to create socket for client
 	 * @author Luke Newton
@@ -192,7 +208,7 @@ public class Client {
 	 * main program for client program
 	 *
 	 * @author Luke Newton
-	 * @param args
+	 * @param args any arguements passed to Client main are not used
 	 */
 	public static void main(String[] args) {
 		Client client = null;
@@ -459,7 +475,7 @@ public class Client {
 				outputStream.write(0);
 				outputStream.write(OP_ERROR);
 				outputStream.write(0);
-				outputStream.write(ILLEGAL_TFTP_OPERATION);
+				outputStream.write(UNRECOGNIZED_TID);
 				try {
 					outputStream.write("unrecognized TID".getBytes());
 				} catch (IOException e) {
@@ -731,7 +747,7 @@ public class Client {
 				outputStream.write(0);
 				outputStream.write(OP_ERROR);
 				outputStream.write(0);
-				outputStream.write(ILLEGAL_TFTP_OPERATION);
+				outputStream.write(UNRECOGNIZED_TID);
 				try {
 					outputStream.write("unrecognized TID".getBytes());
 				} catch (IOException e) {

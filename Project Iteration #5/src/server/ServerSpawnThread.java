@@ -64,6 +64,7 @@ public class ServerSpawnThread implements Runnable {
 	private static final byte ACCESS_VIOLATION_CODE = 2;
 	private static final byte DISK_FULL_CODE = 3;
 	private static final byte ILLEGAL_TFTP_OPERATION = 4;
+	private static final byte UNRECOGNIZED_TID = 5;
 	private static final byte FILE_ALREADY_EXISTS = 6;
 
 	private InetAddress serverInetAddress = null;
@@ -205,7 +206,7 @@ public class ServerSpawnThread implements Runnable {
 				outputStream.write(0);
 				outputStream.write(OP_ERROR);
 				outputStream.write(0);
-				outputStream.write(ILLEGAL_TFTP_OPERATION);
+				outputStream.write(UNRECOGNIZED_TID);
 				try {
 					outputStream.write("unrecognized TID".getBytes());
 				} catch (IOException e) {
@@ -487,7 +488,7 @@ public class ServerSpawnThread implements Runnable {
 				outputStream.write(0);
 				outputStream.write(OP_ERROR);
 				outputStream.write(0);
-				outputStream.write(ILLEGAL_TFTP_OPERATION);
+				outputStream.write(UNRECOGNIZED_TID);
 				try {
 					outputStream.write("unrecognized TID".getBytes());
 				} catch (IOException e) {
@@ -658,7 +659,7 @@ public class ServerSpawnThread implements Runnable {
 			writeRequest = true;
 		} else {
 			try {
-				createAndSendErrorPacket(ILLEGAL_TFTP_OPERATION, "Invalid OPCODE");
+				createAndSendErrorPacket(ILLEGAL_TFTP_OPERATION, "Op code not recognized");
 			} catch (IOException e) {
 				System.err.println("IO error occured while sending ERROR packet");
 				e.printStackTrace();

@@ -152,6 +152,7 @@ public class ErrorSimulator {
 	 * 
 	 * @param b boolean indicating whether further data transfers will have a duplicate 
 	 * packet error to handle
+	 * @param millis the number of milliseconds to delay the duplicate packet for
 	 * @author Luke Newton, CRushton
 	 */
 	public void setPacketDuplicate(boolean b, int millis) {
@@ -160,28 +161,28 @@ public class ErrorSimulator {
 	}
 
 	/**
-	 * @param b
+	 * @param b boolean indicating whether the data transfer will have to handle an invalid TID error
 	 */
 	public void setInvalidTID(boolean b) {
 		this.invalidTIDError = b;
 	}
 
 	/**
-	 * @param b
+	 * @param b boolean indicating whether the data transfer will have to handle an invalid opcode error
 	 */
 	public void setInvalidOpcode(boolean b) {
 		this.invalidOpcodeError = b;
 	}
 
 	/**
-	 * @param b
+	 * @param b boolean indicating whether the data transfer will have to handle an invalid mode error
 	 */
 	public void setInvalidMode(boolean b) {
 		this.invalidModeError = b;	
 	}
 
 	/**
-	 * @param b
+	 * @param b boolean indicating whether the data transfer will have to handle an invalid filename error
 	 */
 	public void setInvalidFilename(boolean b) {
 		this.invalidFilenameError = b;
@@ -222,7 +223,7 @@ public class ErrorSimulator {
 	 * error sim algorithm
 	 * 
 	 * @author Luke Newton
-	 * @param args
+	 * @param args any arguements passed to ErrorSimulator are not used
 	 */
 	public static void main(String[] args) {
 		//attempt to create error simulator

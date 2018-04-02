@@ -18,7 +18,10 @@ public class ErrorSimMenuRunnable implements Runnable{
 	private static final byte OP_DATA = 3;
 	private static final byte OP_ACK = 4;
 
-	/**Constructor*/
+	/**Constructor
+	 * 
+	 * @param errorSim the error simulator that this menu is for
+	*/
 	public ErrorSimMenuRunnable(ErrorSimulator errorSim){
 		this.errorSim = errorSim;
 	}

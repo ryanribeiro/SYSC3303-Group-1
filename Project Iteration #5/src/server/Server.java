@@ -181,7 +181,7 @@ public class Server {
 	/**
 	 * main method for server program containing specified server algorithm
 	 * 
-	 * @param args
+	 * @param args any arguements passed to Server main are not used
 	 */
 	public static void main(String[] args) {
 		/*attempt to create server*/
