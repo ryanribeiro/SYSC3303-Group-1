@@ -1,6 +1,6 @@
 package client;
 
-import java.net.*;
+
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -8,6 +8,12 @@ import java.nio.file.Paths;
 import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -40,9 +46,8 @@ public class Client {
 	private static final byte OP_ERROR = 5;
 
 	//TFTP Address
-	private static final String TFTP_SERVER_IP = "127.0.0.1";
 	private static final byte ILLEGAL_TFTP_OPERATION = 4;
-	private InetAddress serverInetAddress = null;
+	private InetAddress serverAddress = null;
 	private int serverPort;
 
 	//socket used by client to send and receive datagrams
@@ -62,7 +67,7 @@ public class Client {
 	public Client() throws SocketException {
 		try {
 			receivePacket = new DatagramPacket(new byte[MAX_PACKET_SIZE], MAX_PACKET_SIZE);
-			serverInetAddress = InetAddress.getByName(TFTP_SERVER_IP);
+			serverAddress = InetAddress.getLocalHost();
 		} catch (UnknownHostException e) {
 			System.out.println("Failed to initialize TFTP Server IP");
 			e.printStackTrace();
@@ -108,7 +113,7 @@ public class Client {
 	private void acknowledge(byte[] blockID) {
 		byte[] ack = {0, OP_ACK, blockID[2], blockID[3]};
 
-		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, receivePacket.getAddress(), receivePacket.getPort());
+		DatagramPacket ACKDatagram = new DatagramPacket(ack, ack.length, serverAddress, serverPort);
 
 		sendMessage(ACKDatagram);
 		if(!quietMode)
@@ -179,7 +184,7 @@ public class Client {
 			System.out.print("Sending packet \nTo: ");
 			printPacketInfo(message);
 		}
-		if(receivePacket.getPort() == serverPort && receivePacket.getAddress() == serverInetAddress)
+		if(receivePacket.getPort() == serverPort && receivePacket.getAddress() == serverAddress)
 			lastPacketSent = message;
 	}
 
@@ -245,6 +250,24 @@ public class Client {
 			}else if(command.equalsIgnoreCase("verbose")){
 				client.quietMode = false;
 				System.out.println("verbose mode activated");
+			}else if(command.equalsIgnoreCase("connect")){
+				//further requests will be sent to the specified address (default is local address)
+				if(input[1].equalsIgnoreCase("local") && input[2].equalsIgnoreCase("host")){
+					try {
+						client.serverAddress = InetAddress.getLocalHost();
+						System.out.println("sending server requests to:" + client.serverAddress.toString());
+					} catch (UnknownHostException e) {
+						System.err.println("unable to determine local address");
+					}
+				}else{
+					try {
+						//note: determining if the specified address is valid seems to take a while, not really much that can be done about this
+						client.serverAddress = InetAddress.getByName(input[1]);
+						System.out.println("sending server requests to:" + client.serverAddress.toString());
+					} catch (UnknownHostException e) {
+						System.out.println("Invalid address given:" + input[1]);
+					}
+				}
 			}else if(command.equalsIgnoreCase("help")){
 				if(input.length == 1)
 					client.printHelpMenu();
@@ -273,6 +296,10 @@ public class Client {
 				}else if(input[1].equalsIgnoreCase("verbose")){
 					System.out.println("\nFormat: verbose\n"
 							+ "The command 'verbose' will cause the client to display information on each packet sent and recieved.\n");
+				}else if(input[1].equalsIgnoreCase("connect")){
+					System.out.println("\nGeneral format: connect <IP address>\n"
+							+ "Special Case: connect local host\n"
+							+ "The command 'connect' will send all further requests to the specified IP address.\n");
 				}else{
 					System.out.println("Invalid command! Type 'help' to check available commands");
 				}
@@ -300,7 +327,7 @@ public class Client {
 		byte[] RRQData = createPacketData(filename, MODE, OP_RRQ);
 		//create RRQ
 		DatagramPacket RRQDatagram = new DatagramPacket(RRQData, RRQData.length,
-				serverInetAddress, INTERMEDIATE_HOST_PORT_NUMBER);
+				serverAddress, INTERMEDIATE_HOST_PORT_NUMBER);
 
 		//send RRQ
 		sendMessage(RRQDatagram);
@@ -321,7 +348,7 @@ public class Client {
 		byte[] WRQData = createPacketData(filename, MODE, OP_WRQ);
 		//create WRQ
 		DatagramPacket WRQDatagram = new DatagramPacket(WRQData, WRQData.length,
-				serverInetAddress, serverPort);
+				serverAddress, serverPort);
 
 		//read in the specified file
 		byte[][] fileData = splitByteArray(readFile(filename));
@@ -352,7 +379,7 @@ public class Client {
 							System.out.println("Client: waiting for acknowledge");
 						sendReceiveSocket.receive(receivePacket);
 						if(firstTraversal){
-							serverInetAddress = receivePacket.getAddress();
+							serverAddress = receivePacket.getAddress();
 							serverPort = receivePacket.getPort();
 							firstTraversal = false;
 						}
@@ -360,7 +387,7 @@ public class Client {
 					} catch (SocketTimeoutException er) { //Timed out, resend previous packet
 						if(!quietMode)
 							System.err.println("Timed out, resending last packet.");
-						numTimeouts += 1;
+						numTimeouts++;
 						sendMessage(lastPacketSent);
 					} catch (IOException e) {
 						System.err.println("client error while waiting for acknowledge");
@@ -426,7 +453,7 @@ public class Client {
 			ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
 			//ensure packet comes from same TID
-			if(receivePacket.getPort() != serverPort || receivePacket.getAddress() != serverInetAddress){
+			if(receivePacket.getPort() != serverPort || receivePacket.getAddress() != serverAddress){
 				System.err.println("unrecognized TID: " + receivePacket.getPort());
 				//unexpected TID
 				outputStream.write(0);
@@ -463,7 +490,7 @@ public class Client {
 
 				//create data datagram
 				response = new DatagramPacket(serverResponseData, serverResponseData.length,
-						serverInetAddress, serverPort);
+						serverAddress, serverPort);
 			}
 		}while(true);
 	}
@@ -501,7 +528,7 @@ public class Client {
 			byte[] responseData = byteStream.toByteArray();
 
 			DatagramPacket errorPacket = new DatagramPacket(responseData, responseData.length,
-					serverInetAddress, serverPort); //<- IOException source
+					serverAddress, serverPort); //<- IOException source
 
 			sendMessage(errorPacket);
 		}
@@ -625,7 +652,7 @@ public class Client {
 					try {
 						sendReceiveSocket.receive(receivePacket);
 						if(firstTraversal){
-							serverInetAddress = receivePacket.getAddress();
+							serverAddress = receivePacket.getAddress();
 							serverPort = receivePacket.getPort();
 							firstTraversal = false;
 						}
@@ -697,7 +724,7 @@ public class Client {
 			blockNumber = extractBlockNumber(serverResponseData);
 
 			//ensure packet comes from same TID
-			if(receivePacket.getPort() != serverPort || receivePacket.getAddress() != serverInetAddress){
+			if(receivePacket.getPort() != serverPort || receivePacket.getAddress() != serverAddress){
 				System.err.println("unrecognized TID: " + receivePacket.getPort());
 				//unexpected TID
 				ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -730,7 +757,7 @@ public class Client {
 				//add response data to buffer (index 4 is the start of data in TFTP DATA packets)
 				for(int i = 4; i < messageSize; i++)
 					responseBuffer.add(serverResponseData[i]);
-				
+
 				//send acknowledgement to server (parameter passed is a conversion of int to byte[])
 				acknowledge(intToByteArray(blockNumber));
 			}
@@ -805,6 +832,7 @@ public class Client {
 		System.out.println("type 'write' followed by a file name to begin a write request.");
 		System.out.println("type 'quiet' to set the client to quiet file transfer mode");
 		System.out.println("type 'verbose' to set the client to verbose file transfer mode");
+		System.out.println("type 'connect' to specify the address to send requests to");
 		System.out.println("type 'quit' to shutdown the client.");
 		System.out.println("type 'help' to display this message again, or 'help' followed by any of the above command words for further decription.\n");
 	}
