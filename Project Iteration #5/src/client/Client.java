@@ -113,7 +113,6 @@ public class Client {
 		} catch (IOException e) {
 			System.out.println("Failed to write the file.");
 			e.printStackTrace();
-			System.exit(1);
 		} catch (SecurityException se) {
 			System.out.println("Access violation while trying to write file from server.");
 			se.printStackTrace();
